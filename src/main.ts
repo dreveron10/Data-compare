@@ -34,6 +34,7 @@ import uPlot from "uplot";
 import { isGenericAlt, parseGenericAlt } from "./parsers/genericAlt";
 import { isGpsLog, isGpsSummary, parseGpsLog } from "./parsers/featherweightGps";
 import { gpsOnlyHtml } from "./gpsOnly";
+import { gFromMaterial, parseOrk } from "./parsers/ork";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
@@ -868,6 +869,35 @@ function vehicleInput() {
   renderSL();
 }
 for (const id of ["veh-burnout", "veh-prop", "veh-dia", "veh-rated", "veh-rail"]) $(id).addEventListener("change", vehicleInput);
+// fill the Vehicle card (and fins) from an OpenRocket design, after showing what would change
+$<HTMLInputElement>("veh-ork").addEventListener("change", async (ev) => {
+  const inp = ev.target as HTMLInputElement;
+  const file = inp.files?.[0];
+  inp.value = "";
+  if (!file) return;
+  let o;
+  try { o = parseOrk(await file.arrayBuffer()); }
+  catch (e) { showWarnings([`${file.name}: ${(e as Error).message}`]); return; }
+  const v = getVehicle(vehicleKey);
+  const lines: string[] = [];
+  const lb = (x: number | null) => (x === null ? "empty" : `${x.toFixed(2)} lb`);
+  const next = { ...v };
+  if (o.burnoutLb !== null) { lines.push(`Burnout mass: ${lb(v.burnoutLb)} → ${lb(o.burnoutLb)}`); next.burnoutLb = o.burnoutLb; }
+  if (o.liftoffLb !== null && o.burnoutLb !== null) { const p2 = o.liftoffLb - o.burnoutLb; lines.push(`Propellant: ${lb(v.propLb)} → ${lb(p2)}`); next.propLb = p2; }
+  if (o.diaIn !== null) { lines.push(`Body diameter: ${v.diaIn.toFixed(2)} in → ${o.diaIn.toFixed(2)} in`); next.diaIn = o.diaIn; }
+  if (o.fin) {
+    const g = gFromMaterial(o.fin.material) ?? v.fin?.gPsi ?? 425_000;
+    lines.push(`Fins: ${o.fin.rootIn.toFixed(2)} in root, ${o.fin.tipIn.toFixed(2)} in tip, ${o.fin.spanIn.toFixed(2)} in span, ${o.fin.thickIn.toFixed(3)} in thick (${o.fin.material || "material not named"}${gFromMaterial(o.fin.material) ? "" : ", shear modulus kept, check it"})`);
+    next.fin = { rootIn: o.fin.rootIn, tipIn: o.fin.tipIn, spanIn: o.fin.spanIn, thickIn: o.fin.thickIn, gPsi: g };
+  }
+  if (!lines.length) { showWarnings([`${file.name}: nothing usable found. ${o.notes.join(" ")}`]); return; }
+  const where = vehicleLabel ? `the "${vehicleLabel}" vehicle` : "this browser's default vehicle";
+  if (!confirm(`From ${o.name} (${file.name}), replace these values for ${where}?\n\n${lines.join("\n")}${o.notes.length ? `\n\nNot found: ${o.notes.join(" ")}` : ""}`)) return;
+  setVehicle(vehicleKey, next);
+  renderVehicle(); renderCoast(); renderMotor(); renderFlutter(); renderSL();
+  if (o.notes.length) showWarnings(o.notes.map((n) => `${file.name}: ${n}`));
+});
+
 async function loadVehicleKey() {
   const e = currentEntryId ? await getEntry(currentEntryId) : undefined;
   vehicleLabel = e?.vehicle?.trim() ?? "";
