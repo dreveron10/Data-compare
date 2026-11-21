@@ -364,9 +364,9 @@ function reanalyze() {
 function renderEvents() {
   const p = A!.path;
   $("events").innerHTML = A!.events
-    .map((e) => {
+    .map((e, i) => {
       const alt = p.y[indexAt(p.t, e.t)];
-      return `<li data-t="${e.t}"><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${alt.toFixed(0)} ft</span><span class="t">T+${e.t.toFixed(2)} s</span></li>`;
+      return `<li data-t="${e.t}"><span class="num">${i < 9 ? i + 1 : ""}</span><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${alt.toFixed(0)} ft</span><span class="t">T+${e.t.toFixed(2)} s</span></li>`;
     })
     .join("");
 }
@@ -532,11 +532,53 @@ function tick(now: number) {
 // ---------- wiring ----------
 playBtn.addEventListener("click", () => (playing ? pause() : play()));
 scrub.addEventListener("input", () => seek(parseFloat(scrub.value)));
+// ---------- keyboard ----------
+function jumpEvent(dir: 1 | -1) {
+  if (!A) return;
+  const evs = A.events.map((e) => e.t).sort((a, b) => a - b);
+  const target = dir > 0 ? evs.find((x) => x > t + 0.01) : [...evs].reverse().find((x) => x < t - 0.01);
+  if (target !== undefined) seek(target);
+}
+function stepSpeed(dir: 1 | -1) {
+  const i = speedSel.selectedIndex + dir;
+  if (i >= 0 && i < speedSel.options.length) speedSel.selectedIndex = i;
+}
+function setCam(mode: CameraMode) {
+  document.querySelectorAll("[data-cam]").forEach((x) => x.classList.toggle("active", (x as HTMLElement).dataset.cam === mode));
+  replay.setCameraMode(mode);
+}
 document.addEventListener("keydown", (e) => {
-  if (e.code === "Space" && !(e.target instanceof HTMLInputElement && e.target.type !== "range") && !(e.target instanceof HTMLSelectElement)) {
-    e.preventDefault();
-    playing ? pause() : play();
-  }
+  const tgt = e.target as HTMLElement;
+  const typing = (tgt instanceof HTMLInputElement && tgt.type !== "range") || tgt instanceof HTMLTextAreaElement || tgt instanceof HTMLSelectElement;
+  if (typing || e.ctrlKey || e.metaKey || e.altKey || !A) return;
+  if (document.querySelector("dialog[open]")) return;
+  const k = e.key;
+  let handled = true;
+  if (e.code === "Space" || k === "k" || k === "K") { if (k.toLowerCase() === "k") pause(); else (playing ? pause() : play()); }
+  else if (k === "ArrowRight") seek(t + (e.shiftKey ? 1 : 0.1));
+  else if (k === "ArrowLeft") seek(t - (e.shiftKey ? 1 : 0.1));
+  else if (k === "." ) jumpEvent(1);
+  else if (k === ",") jumpEvent(-1);
+  else if (k === "j" || k === "J") stepSpeed(-1);
+  else if (k === "l" || k === "L") stepSpeed(1);
+  else if (k === "Home") seek(A.tStart);
+  else if (k === "End") seek(A.tEnd);
+  else if (/^[1-9]$/.test(k)) { const ev = A.events[Number(k) - 1]; if (ev) seek(ev.t); }
+  else if (k === "f" || k === "F") setCam("follow");
+  else if (k === "o" || k === "O") setCam("overview");
+  else if (k === "g" || k === "G") setCam("ground");
+  else handled = false;
+  if (handled) e.preventDefault();
+});
+$("ev-prev").addEventListener("click", () => jumpEvent(-1));
+$("ev-next").addEventListener("click", () => jumpEvent(1));
+$("keys-btn").addEventListener("click", () => {
+  const pop = $("keys-pop");
+  pop.hidden = !pop.hidden;
+  $("keys-btn").setAttribute("aria-expanded", String(!pop.hidden));
+});
+document.addEventListener("click", (e) => {
+  if (!(e.target as HTMLElement).closest("#keys-pop, #keys-btn")) $("keys-pop").hidden = true;
 });
 $("events").addEventListener("click", (e) => {
   const li = (e.target as HTMLElement).closest("li");

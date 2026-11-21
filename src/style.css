@@ -232,3 +232,10 @@ select { background: var(--panel-2); color: var(--text); border: 1px solid var(-
 .cmp-item .off input { width: 56px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 5px; font: inherit; font-size: 12px; }
 .cmp-item .x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; }
 .metrics.cmp th:nth-child(n+2) { text-align: right; }
+
+/* transport extras */
+.transport { position: relative; }
+.btn.icon.sm { width: 32px; height: 32px; font-size: 13px; }
+.keys-pop { position: absolute; right: 14px; bottom: calc(100% + 8px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 13px; display: grid; gap: 6px; z-index: 30; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4); }
+kbd { font: inherit; font-size: 12px; background: var(--panel-2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+.events li .num { color: var(--muted); font-size: 11px; width: 12px; }
