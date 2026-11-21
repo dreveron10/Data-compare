@@ -9,8 +9,7 @@ const IMAGERY = (z: number, x: number, y: number) =>
 const TERRAIN = (z: number, x: number, y: number) =>
   `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
 
-export const EARTH_ATTRIBUTION =
-  "Imagery © Esri, Maxar, Earthstar Geographics · Elevation: AWS Terrain Tiles (Mapzen, USGS, NASA SRTM)";
+export { EARTH_ATTRIBUTION } from "./earthAttrib";
 
 const FT_PER_M = 3.28084;
 const EARTH_R_FT = 6371008.8 * FT_PER_M;

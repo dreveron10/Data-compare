@@ -1,7 +1,7 @@
 import "./style.css";
 import { analyze, flightPhases, indexAt, type Analysis } from "./analysis";
 import { CHANNELS, loadBlueRaven, parseSettings, type BlueRavenFlight, type Channel, type DeploySettings } from "./parsers/blueRaven";
-import { Replay3D, type CameraMode } from "./replay3d";
+import type { Replay3D, CameraMode } from "./replay3d";
 import { Charts } from "./charts";
 import { loadAndAnalyze } from "./background";
 import { findFindings } from "./findings";
@@ -19,7 +19,7 @@ import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
-import { EARTH_ATTRIBUTION } from "./earth";
+import { EARTH_ATTRIBUTION } from "./earthAttrib";
 import { evaluate, loadDefaultRecovery, saveDefaultRecovery, type RecoveryConfig } from "./recovery";
 import {
   deleteEntry, exportBackup, getEntry, importBackup, listEntries, newId, putEntry, requestPersistence, storageUse,
@@ -34,16 +34,39 @@ type ReplayApi = Pick<Replay3D, "setFlight" | "setCompare" | "setTime" | "setCam
   onCameraMode?: (mode: CameraMode) => void;
   onSatellite?: (available: boolean, progress: number) => void;
 };
-let replay: ReplayApi;
-try {
-  replay = new Replay3D($("view3d"), $("inset3d"));
-} catch {
-  replay = { setFlight() {}, setCompare() {}, setTime() {}, setCameraMode() {}, setSatellite() {}, snapshot: () => "", refreshUnitLabels() {} };
+// The 3D code (three.js renderer, Earth tiles) loads in its own chunk so the page and charts come up
+// first. Until it arrives, this stand-in remembers the latest state and hands it over when ready.
+let replay3d: ReplayApi | null = null;
+const pending: { flight?: [Analysis, BlueRavenFlight]; cmps?: ActiveCompare[]; t?: number; cam?: CameraMode; sat?: boolean } = {};
+const replay: ReplayApi = {
+  setFlight(a, f) { pending.flight = [a, f]; replay3d?.setFlight(a, f); },
+  setCompare(c = []) { pending.cmps = c; replay3d?.setCompare(c); },
+  setTime(x) { pending.t = x; replay3d?.setTime(x); },
+  setCameraMode(m, reset) { pending.cam = m; replay3d?.setCameraMode(m, reset); },
+  setSatellite(on) { pending.sat = on; replay3d?.setSatellite(on); },
+  snapshot: () => replay3d?.snapshot() ?? "",
+  refreshUnitLabels() { replay3d?.refreshUnitLabels(); },
+};
+function noWebGL() {
   document.body.classList.add("no-webgl");
   $("view3d").innerHTML =
     '<div class="no-gl">3D replay needs WebGL, which this browser has turned off or does not support. ' +
     "Charts and tables below still work. Try Chrome or Edge with hardware acceleration enabled.</div>";
 }
+import("./replay3d")
+  .then(({ Replay3D: R3 }) => {
+    let r: Replay3D;
+    try { r = new R3($("view3d"), $("inset3d")); } catch { noWebGL(); return; }
+    r.onCameraMode = (m) => replay.onCameraMode?.(m);
+    r.onSatellite = (a, p) => replay.onSatellite?.(a, p);
+    replay3d = r;
+    if (pending.flight) r.setFlight(...pending.flight);
+    if (pending.cmps) r.setCompare(pending.cmps);
+    if (pending.cam) r.setCameraMode(pending.cam);
+    if (pending.sat) r.setSatellite(true);
+    if (pending.t !== undefined) r.setTime(pending.t);
+  })
+  .catch(() => { $("view3d").innerHTML = '<div class="no-gl">The 3D replay could not load. Check the connection and reload; charts and tables still work.</div>'; });
 const charts = new Charts($("charts"), (t) => seek(t));
 const scrub = $<HTMLInputElement>("scrub");
 const playBtn = $<HTMLButtonElement>("play");
