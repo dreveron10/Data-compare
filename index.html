@@ -35,7 +35,9 @@
           <button class="chip active" data-cam="follow">Follow</button>
           <button class="chip" data-cam="overview">Overview</button>
           <button class="chip" data-cam="ground">Ground</button>
+          <button class="chip active" id="sat-toggle" hidden>Satellite</button>
         </div>
+        <div class="attrib" id="sat-attrib" hidden></div>
         <div class="inset">
           <div class="inset-title">Attitude</div>
           <div id="inset3d" class="inset3d"></div>
@@ -76,6 +78,17 @@
           <h3>Flight summary</h3>
           <div class="muted small">Site value vs what the Blue Raven reported</div>
           <table class="metrics" id="metrics"></table>
+        </div>
+        <div class="panel" id="cmp-panel" hidden>
+          <h3>Compare</h3>
+          <div class="muted small" id="cmp-sub">Overlay an OpenRocket simulation export or another Blue Raven flight. Both are aligned at liftoff.</div>
+          <table class="metrics cmp" id="cmp-table"></table>
+          <div class="muted small" id="cmp-notes"></div>
+          <div class="cmp-actions">
+            <label class="btn small-btn">Open sim or flight<input id="cmp-input" type="file" multiple accept=".csv,.xlsx" hidden /></label>
+            <button class="btn small-btn" id="cmp-sample">Sample flight: SN1742</button>
+            <button class="btn small-btn" id="cmp-clear" hidden>Remove</button>
+          </div>
         </div>
         <div class="panel" id="gps-panel" hidden>
           <h3>Blue Raven vs GPS</h3>

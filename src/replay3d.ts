@@ -8,6 +8,8 @@ import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import type { Analysis } from "./analysis";
 import { indexAt, lowerBound } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
+import { sampleAt, type CompareTrace } from "./compare";
+import { buildSatelliteGround } from "./satellite";
 
 export type CameraMode = "follow" | "overview" | "ground";
 
@@ -122,6 +124,15 @@ export class Replay3D {
   private insetCam: THREE.PerspectiveCamera;
   private insetRocket = buildRocket();
 
+  private cmpGroup = new THREE.Group();
+  private satMesh?: THREE.Mesh;
+  private satOn = true;
+  private grid?: THREE.GridHelper;
+  private loadToken = 0;
+  /** called when satellite imagery finishes loading (true) or is unavailable (false) */
+  onSatellite?: (loaded: boolean) => void;
+  private cmpMarker?: THREE.Mesh;
+  private cmp?: CompareTrace;
   private a?: Analysis;
   private f?: BlueRavenFlight;
   private t = 0;
@@ -146,6 +157,7 @@ export class Replay3D {
     sun.position.set(-3, 5, 2);
     this.scene.add(sun);
     this.scene.add(this.worldGroup);
+    this.scene.add(this.cmpGroup);
     this.scene.add(this.rocket);
 
     this.dropLine = new THREE.Line(
@@ -251,6 +263,23 @@ export class Replay3D {
     (grid.material as THREE.Material).transparent = true;
     (grid.material as THREE.Material).opacity = 0.55;
     this.worldGroup.add(grid);
+    this.grid = grid;
+
+    // satellite imagery (needs GPS for the pad location); loads in the background
+    this.satMesh = undefined;
+    const token = ++this.loadToken;
+    if (a.gps && f.gps) {
+      buildSatelliteGround(f.gps.padLat, f.gps.padLon, size / 2).then((mesh) => {
+        if (token !== this.loadToken) { mesh?.geometry.dispose(); return; }
+        if (!mesh) { this.onSatellite?.(false); return; }
+        this.satMesh = mesh;
+        this.worldGroup.add(mesh);
+        this.applySatellite();
+        this.onSatellite?.(true);
+      });
+    } else {
+      this.onSatellite?.(false);
+    }
 
     // pad
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(30, 30, 4, 24), new THREE.MeshStandardMaterial({ color: 0x7bd88f }));
@@ -392,6 +421,59 @@ export class Replay3D {
     this.worldGroup.add(s);
   }
 
+  setSatellite(on: boolean) {
+    this.satOn = on;
+    this.applySatellite();
+  }
+
+  private applySatellite() {
+    const show = !!this.satMesh && this.satOn;
+    if (this.satMesh) this.satMesh.visible = show;
+    if (this.grid) (this.grid.material as THREE.Material).opacity = show ? 0.18 : 0.55;
+  }
+
+  /** Draw a comparison path (sim or another flight) with a marker that moves in sync. */
+  setCompare(cmp?: CompareTrace) {
+    this.cmpGroup.traverse((o) => {
+      const m = o as THREE.Mesh;
+      m.geometry?.dispose?.();
+      const mat = m.material as THREE.Material | undefined;
+      mat?.dispose?.();
+    });
+    this.cmpGroup.clear();
+    this.lineMats = this.lineMats.filter((m) => !m.userData.cmp);
+    this.labels = this.labels.filter((l) => !l.userData.cmp);
+    this.cmp = cmp;
+    this.cmpMarker = undefined;
+    if (!cmp?.path || !this.a) return;
+    const p = cmp.path;
+    const pos: number[] = [];
+    const step = Math.max(1, Math.floor(p.t.length / 3000));
+    for (let i = 0; i < p.t.length; i += step) pos.push(p.x[i], p.y[i], p.z[i]);
+    const geo = new LineGeometry();
+    geo.setPositions(pos);
+    const mat = new LineMaterial({ color: 0xff9de2, linewidth: 2.5, transparent: true, opacity: 0.85, dashed: true, dashSize: 60, gapSize: 35 });
+    mat.userData.cmp = true;
+    mat.resolution.set(this.host.clientWidth, this.host.clientHeight);
+    this.lineMats.push(mat);
+    const line = new Line2(geo, mat);
+    line.computeLineDistances();
+    this.cmpGroup.add(line);
+    let iA = 0;
+    for (let i = 0; i < p.y.length; i++) if (p.y[i] > p.y[iA]) iA = i;
+    const sameFrame = cmp.compass === this.a.compass;
+    const label = textSprite(`${cmp.kind === "sim" ? "Sim" : cmp.name} apogee ${p.y[iA].toFixed(0)} ft${sameFrame ? "" : " (heading not aligned)"}`, "#ff9de2");
+    label.position.set(p.x[iA], p.y[iA], p.z[iA]);
+    label.userData.small = true;
+    label.userData.offset = true;
+    label.userData.cmp = true;
+    this.labels.push(label);
+    this.cmpGroup.add(label);
+    this.cmpMarker = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xff9de2 }));
+    this.cmpGroup.add(this.cmpMarker);
+    this.setTime(this.t);
+  }
+
   setCameraMode(mode: CameraMode, reset = false) {
     this.mode = mode;
     if (!this.a) return;
@@ -486,6 +568,13 @@ export class Replay3D {
     g.attributes.position.needsUpdate = true;
     this.dropLine.computeLineDistances();
     this.groundRing.position.set(pos.x, 1, pos.z);
+
+    if (this.cmpMarker && this.cmp?.path) {
+      const lift = this.a.events.find((e) => e.key === "liftoff")?.t ?? 0;
+      const p = this.cmp.path;
+      const tc = Math.min(p.t[p.t.length - 1], Math.max(p.t[0], t - lift));
+      this.cmpMarker.position.set(sampleAt(p.t, p.x, tc), sampleAt(p.t, p.y, tc), sampleAt(p.t, p.z, tc));
+    }
   }
 
   private frame() {
@@ -510,6 +599,7 @@ export class Replay3D {
         this.chute.position.copy(this.rocket.position).add(new THREE.Vector3(0, len * 0.9 + s, 0));
       }
       this.groundRing.scale.setScalar(Math.max(15, camDist * 0.02));
+      if (this.cmpMarker) this.cmpMarker.scale.setScalar(Math.max(5, this.camera.position.distanceTo(this.cmpMarker.position) * 0.008));
       for (const o of this.worldGroup.children) {
         if (o.userData.marker) o.scale.setScalar(Math.max(6, this.camera.position.distanceTo(o.position) * 0.006));
       }

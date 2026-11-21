@@ -4,6 +4,16 @@ import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import type { Analysis, FlightEvent } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
+import { sampleAt, type CompareTrace } from "./compare";
+
+const CMP_COLOR = "#ff9de2";
+
+/** resample a comparison series onto x (flight time), aligned at liftoff */
+function onBase(x: ArrayLike<number>, lift: number, t: ArrayLike<number>, y: ArrayLike<number>) {
+  const out = new Float32Array(x.length);
+  for (let i = 0; i < x.length; i++) out[i] = sampleAt(t, y, x[i] - lift);
+  return out;
+}
 
 interface ChartDef {
   title: string;
@@ -27,13 +37,15 @@ export class Charts {
     this.ro.observe(host);
   }
 
-  setFlight(a: Analysis, f: BlueRavenFlight) {
+  setFlight(a: Analysis, f: BlueRavenFlight, cmp?: CompareTrace) {
     this.plots.forEach((p) => p.destroy());
     this.plots = [];
     this.host.innerHTML = "";
     this.events = a.events;
     const lr = f.lr!;
     const hr = f.hr;
+    const lift = a.events.find((e) => e.key === "liftoff")?.t ?? 0;
+    const cmpLabel = cmp ? (cmp.kind === "sim" ? `Sim: ${cmp.name}` : `Compare: ${cmp.name}`) : "";
     const defs: ChartDef[] = [
       {
         title: "Altitude", yLabel: "ft", x: lr.t,
@@ -42,6 +54,7 @@ export class Charts {
           { label: "Baro AGL (filtered)", data: a.altSmooth, color: "#5cc8ff", width: 2, unit: "ft" },
           { label: "Inertial altitude", data: lr.inAlt, color: "#b48cff", width: 1.5, dash: [6, 4], unit: "ft" },
           ...(a.gps ? [{ label: "GPS altitude AGL", data: a.gps.altOnLR, color: "#ffffff", width: 1.5, dash: [2, 3], unit: "ft" }] : []),
+          ...(cmp?.alt ? [{ label: cmpLabel, data: onBase(lr.t, lift, cmp.t, cmp.alt), color: CMP_COLOR, width: 2, dash: [8, 4], unit: "ft" }] : []),
         ],
       },
       {
@@ -51,6 +64,7 @@ export class Charts {
           { label: "Inertial vertical", data: lr.velUp, color: "#7bd88f", width: 1.5, unit: "ft/s" },
           { label: "Inertial total", data: a.totalVel, color: "#f5c26b", width: 1.5, unit: "ft/s" },
           ...(a.gps ? [{ label: "GPS vertical", data: a.gps.vertVOnLR, color: "#ffffff", width: 1.5, dash: [2, 3], unit: "ft/s" }] : []),
+          ...(cmp?.vVert ? [{ label: `${cmpLabel} (vertical)`, data: onBase(lr.t, lift, cmp.t, cmp.vVert), color: CMP_COLOR, width: 2, dash: [8, 4], unit: "ft/s" }] : []),
         ],
       },
     ];
@@ -76,6 +90,7 @@ export class Charts {
         series: [
           { label: "Axial", data: a.axialAccel, color: "#ff7a90", width: 1, unit: "g" },
           { label: "Magnitude", data: a.accelMag, color: "rgba(207,214,228,0.55)", width: 1, unit: "g" },
+          ...(cmp?.acc && cmp.accT ? [{ label: cmpLabel, data: onBase(hr.t, lift, cmp.accT, cmp.acc), color: CMP_COLOR, width: 1.5, dash: [8, 4], unit: "g" }] : []),
         ],
       });
     }
@@ -148,7 +163,9 @@ export class Charts {
         }],
       },
     };
-    const data = [Array.from(d.x), ...d.series.map((s) => Array.from(s.data))] as uPlot.AlignedData;
+    // uPlot treats null as a gap; NaN would break autoscaling
+    const clean = (a: ArrayLike<number>) => Array.from(a, (v) => (Number.isFinite(v) ? v : null));
+    const data = [Array.from(d.x), ...d.series.map((s) => clean(s.data))] as uPlot.AlignedData;
     const u = new uPlot(opts, data, wrap);
     // click (without drag) to seek
     let downX = 0;

@@ -12,7 +12,8 @@ Everything runs in the browser. Files are never uploaded.
 |---|---|---|
 | Featherweight Blue Raven | `*_HR_*.csv`, `*_LR_*.csv`, `*_summary_*.csv`, `BR_deploy_settings_*.xlsx` (optional) | Phase 1 |
 | Featherweight GPS tracker | flight CSV, summary CSV (optional) | Phase 2, loaded together with a Blue Raven |
-| Fluctus, RRC3+, OpenRocket CSV | | Planned |
+| OpenRocket | simulation CSV export (as a comparison) | Phase 3 |
+| Fluctus, RRC3+ | | Planned |
 
 Files are recognized by their headers, not their names, so renamed files still work.
 
@@ -22,6 +23,8 @@ Files are recognized by their headers, not their names, so renamed files still w
 - **Charts:** altitude, velocity, acceleration, tilt, roll rate, battery and pyro channel voltages. Synced cursor and zoom; click to jump the replay to that time.
 - **Summary:** apogee, max velocity, burnout, tilt, roll, descent rates, deploy altitude and fire times. Each value is shown next to what the Blue Raven reported.
 - **GPS (optional):** load the Featherweight GPS tracker CSV with the Blue Raven files. The logs are time aligned automatically (launch detection, refined by matching vertical velocity; manual override available), the scene is rotated to true east/north, the descent follows the real GPS drift, and a Blue Raven vs GPS table compares apogee, velocities, descent rates and drift, with a map link to the landing spot.
+- **Compare:** overlay an OpenRocket simulation export or a second Blue Raven flight. Both are aligned at liftoff and shown pink dashed on the charts and in 3D (with a marker moving in sync), plus a side-by-side table (apogee, time to apogee, max velocity and accel, burnout, descent rates, main deploy altitude, flight time, drift). For the sim path in 3D, include "Position East/North of launch" in the OpenRocket export.
+- **Satellite ground:** with a GPS log, Esri World Imagery around the pad is placed under the 3D scene (toggle with the Satellite button).
 - **Deployment settings:** the condition matrix from the settings XLSX for each channel, with each condition marked met/unmet at the moment the channel fired.
 
 ## How the numbers are computed

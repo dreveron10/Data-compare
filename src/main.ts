@@ -3,6 +3,9 @@ import { analyze, indexAt, type Analysis } from "./analysis";
 import { CHANNELS, loadBlueRaven, type BlueRavenFlight, type Channel } from "./parsers/blueRaven";
 import { Replay3D, type CameraMode } from "./replay3d";
 import { Charts } from "./charts";
+import { KEY_ROWS, keyNumbersOf, traceFromFlight, traceFromSim, type CompareTrace } from "./compare";
+import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
+import { SAT_ATTRIBUTION } from "./satellite";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -20,6 +23,21 @@ let playing = false;
 let lastFrame = 0;
 let lastChartUpdate = 0;
 let gpsOffsetOverride: number | undefined;
+let cmp: CompareTrace | undefined;
+
+// ---------- satellite ground ----------
+let satOn = true;
+replay.onSatellite = (loaded) => {
+  $("sat-toggle").hidden = !loaded;
+  $("sat-attrib").hidden = !(loaded && satOn);
+  $("sat-attrib").textContent = SAT_ATTRIBUTION;
+};
+$("sat-toggle").addEventListener("click", () => {
+  satOn = !satOn;
+  $("sat-toggle").classList.toggle("active", satOn);
+  $("sat-attrib").hidden = !satOn;
+  replay.setSatellite(satOn);
+});
 
 // ---------- roll dial ticks ----------
 {
@@ -42,6 +60,7 @@ async function loadFiles(files: { name: string; text?: string; buffer?: ArrayBuf
     warn.push(...res.warnings);
     if (!res.flight.lr) throw new Error("No Blue Raven LR file found. Include the *_LR_*.csv file.");
     gpsOffsetOverride = undefined;
+    cmp = undefined;
     const a = analyze(res.flight);
     warn.push(...a.warnings);
     flight = res.flight;
@@ -53,27 +72,95 @@ async function loadFiles(files: { name: string; text?: string; buffer?: ArrayBuf
   showWarnings(warn);
 }
 
-async function fromFileList(list: FileList | File[]) {
-  const arr = Array.from(list);
-  const files = await Promise.all(
-    arr.map(async (f) => (/\.xlsx$/i.test(f.name) ? { name: f.name, buffer: await f.arrayBuffer() } : { name: f.name, text: await f.text() })),
+type InFile = { name: string; text?: string; buffer?: ArrayBuffer };
+
+async function readList(list: FileList | File[]): Promise<InFile[]> {
+  return Promise.all(
+    Array.from(list).map(async (f) => (/\.xlsx$/i.test(f.name) ? { name: f.name, buffer: await f.arrayBuffer() } : { name: f.name, text: await f.text() })),
   );
+}
+
+async function fromFileList(list: FileList | File[]) {
+  const files = await readList(list);
+  // an OpenRocket export dropped onto a loaded flight is a comparison, not a new flight
+  if (flight && files.length > 0 && files.every((f) => f.text && isOpenRocket(f.text))) {
+    await loadCompare(files);
+    return;
+  }
   await loadFiles(files);
+}
+
+async function loadCompare(files: InFile[]) {
+  if (!A || !flight) return;
+  try {
+    const sim = files.find((f) => f.text && isOpenRocket(f.text));
+    if (sim) {
+      cmp = traceFromSim(parseOpenRocket(sim.text!, sim.name));
+    } else {
+      const res = await loadBlueRaven(files);
+      if (!res.flight.lr) throw new Error("Comparison needs an OpenRocket CSV export or a Blue Raven LR file.");
+      cmp = traceFromFlight(analyze(res.flight), res.flight);
+    }
+    applyCompare();
+    showWarnings(A.warnings);
+  } catch (e) {
+    showWarnings([`Comparison: ${(e as Error).message}`]);
+  }
+}
+
+function applyCompare() {
+  if (!A || !flight) return;
+  charts.setFlight(A, flight, cmp);
+  replay.setCompare(cmp);
+  renderCompare();
+  seek(t);
+}
+
+async function fetchSample(sn: string): Promise<InFile[]> {
+  const base = `samples/${sn}/`;
+  const names = ["HR.csv", "LR.csv", "summary.csv", "deploy_settings.xlsx", "gps.csv", "gps_summary.csv"];
+  const files = await Promise.all(
+    names.map(async (n) => {
+      const r = await fetch(base + n);
+      if (!r.ok) return null;
+      return n.endsWith(".xlsx") ? { name: n, buffer: await r.arrayBuffer() } : { name: n, text: await r.text() };
+    }),
+  );
+  return files.filter((x): x is NonNullable<typeof x> => x !== null);
+}
+
+function renderCompare() {
+  $("cmp-panel").hidden = !A;
+  $("cmp-clear").hidden = !cmp;
+  if (!A || !cmp) {
+    $("cmp-table").innerHTML = "";
+    $("cmp-notes").textContent = "";
+    $("cmp-sub").textContent = "Overlay an OpenRocket simulation export or another Blue Raven flight. Both are aligned at liftoff.";
+    return;
+  }
+  const mine = keyNumbersOf(A);
+  $("cmp-sub").innerHTML = `${cmp.kind === "sim" ? "OpenRocket sim" : "Flight"}: <b>${escapeHtml(cmp.name)}</b> · pink dashed in charts and 3D`;
+  const rows = KEY_ROWS.map(({ k, label, unit }) => {
+    const a = mine[k], b = cmp!.key[k];
+    if (a === null && b === null) return "";
+    let diff = "";
+    if (a !== null && b !== null && Number.isFinite(a) && Number.isFinite(b)) {
+      const d = a - b;
+      const rel = Math.abs(b) > 1e-6 ? Math.abs(d / b) : 0;
+      diff = `<span class="diff${rel > 0.05 ? " big" : ""}">${d >= 0 ? "+" : ""}${fmt(d, unit)}</span>`;
+    }
+    return `<tr><td>${label}</td><td>${fmt(a, unit)}</td><td>${fmt(b, unit)}</td><td>${diff}</td><td class="unit">${unit}</td></tr>`;
+  }).join("");
+  $("cmp-table").innerHTML = `<tr><th>Metric</th><th>This flight</th><th>${cmp.kind === "sim" ? "Sim" : "Other"}</th><th>Δ</th><th></th></tr>${rows}`;
+  const notes = [...cmp.notes];
+  if (cmp.path && cmp.compass !== A.compass) notes.push("3D heading is not aligned between the two (only one has GPS or position data).");
+  $("cmp-notes").innerHTML = notes.map((n) => `<div>${escapeHtml(n)}</div>`).join("");
 }
 
 async function loadSample(sn: string) {
   setBusy(true);
   try {
-    const base = `samples/${sn}/`;
-    const names = ["HR.csv", "LR.csv", "summary.csv", "deploy_settings.xlsx", "gps.csv", "gps_summary.csv"];
-    const files = await Promise.all(
-      names.map(async (n) => {
-        const r = await fetch(base + n);
-        if (!r.ok) return null;
-        return n.endsWith(".xlsx") ? { name: n, buffer: await r.arrayBuffer() } : { name: n, text: await r.text() };
-      }),
-    );
-    await loadFiles(files.filter((x): x is NonNullable<typeof x> => x !== null));
+    await loadFiles(await fetchSample(sn));
   } finally {
     setBusy(false);
   }
@@ -103,7 +190,9 @@ function showFlight() {
   scrub.max = String(A.tEnd);
   scrub.step = "0.002";
   replay.setFlight(A, flight);
-  charts.setFlight(A, flight);
+  replay.setCompare(cmp);
+  charts.setFlight(A, flight, cmp);
+  renderCompare();
   $("lg-x").textContent = A.compass ? "East" : "Downrange";
   $("lg-z").textContent = A.compass ? "North" : "Crossrange";
   renderMetrics();
@@ -385,6 +474,19 @@ $<HTMLInputElement>("gps-offset").addEventListener("change", (e) => {
   if (Number.isFinite(v)) { gpsOffsetOverride = v; reanalyze(); }
 });
 $("gps-auto").addEventListener("click", () => { gpsOffsetOverride = undefined; reanalyze(); });
+
+{
+  const inp = $<HTMLInputElement>("cmp-input");
+  inp.addEventListener("change", async () => {
+    if (inp.files?.length) await loadCompare(await readList(inp.files));
+    inp.value = "";
+  });
+}
+$("cmp-sample").addEventListener("click", async () => {
+  setBusy(true);
+  try { await loadCompare(await fetchSample("SN1742")); } finally { setBusy(false); }
+});
+$("cmp-clear").addEventListener("click", () => { cmp = undefined; applyCompare(); });
 
 // open a sample straight from the URL, e.g. ?sample=SN0614
 const qs = new URLSearchParams(location.search).get("sample");
