@@ -10,6 +10,7 @@ import { windProfile, compassName } from "./wind";
 import { coastDrag } from "./coast";
 import { thrustCurve } from "./thrust";
 import { calibHint } from "./calib";
+import { startTour, tourSeen } from "./tour";
 import { checkSettings } from "./settingsCheck";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
@@ -341,6 +342,8 @@ function showFlight() {
   renderSettings();
   renderScrubEvents();
   loadMarks();
+  // first flight ever on this browser: a short walk through the main controls
+  if (!tourSeen()) setTimeout(() => { if (!document.querySelector("dialog[open]")) startTour(); }, 900);
   pause();
   seek(Math.max(A.tStart, -1));
 }
@@ -1569,6 +1572,10 @@ $("lib-close").addEventListener("click", () => libDlg.close());
 const aboutDlg = $<HTMLDialogElement>("about-dialog");
 $("about-open").addEventListener("click", () => aboutDlg.showModal());
 $("about-close").addEventListener("click", () => aboutDlg.close());
+$("tour-again").addEventListener("click", () => {
+  aboutDlg.close();
+  if (A) startTour(); else showWarnings(["Open a flight (or a sample) first, then the tour can point at the controls."]);
+});
 aboutDlg.addEventListener("click", (e) => { if (e.target === aboutDlg) aboutDlg.close(); });
 $("lib-list").addEventListener("click", async (ev) => {
   const pick = (ev.target as HTMLElement).closest("input[data-pick]") as HTMLInputElement | null;
