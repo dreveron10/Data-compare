@@ -19,6 +19,19 @@ export interface KeyNumbers {
   drift: number | null; // ft
 }
 
+export const CMP_COLORS = ["#ff9de2", "#c6f07a", "#b9a3ff"];
+export const MAX_COMPARES = 3;
+
+/** a comparison currently shown: its trace, source files (for saving), time offset and colour */
+export interface ActiveCompare {
+  id: string;
+  trace: CompareTrace;
+  files: { name: string; text?: string; buffer?: ArrayBuffer }[];
+  /** seconds added to the comparison's time (positive = later) */
+  offset: number;
+  color: string;
+}
+
 export interface CompareTrace {
   kind: "sim" | "flight";
   name: string;

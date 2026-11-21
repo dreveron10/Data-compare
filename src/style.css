@@ -215,3 +215,12 @@ select { background: var(--panel-2); color: var(--text); border: 1px solid var(-
 .rec-limits { display: grid; gap: 6px; margin: 10px 0 4px; }
 .rec-limits label { display: grid; grid-template-columns: 1fr 80px 42px; align-items: center; gap: 6px; color: var(--muted); }
 .rec-limits input { width: 80px; }
+
+/* comparison list */
+.cmp-item { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; }
+.cmp-item i, .sw { width: 12px; height: 4px; border-radius: 2px; flex: none; display: inline-block; vertical-align: middle; }
+.cmp-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-item .off { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.cmp-item .off input { width: 56px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 3px 5px; font: inherit; font-size: 12px; }
+.cmp-item .x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; }
+.metrics.cmp th:nth-child(n+2) { text-align: right; }

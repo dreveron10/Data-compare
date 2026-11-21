@@ -3,7 +3,7 @@ import { analyze, indexAt, type Analysis } from "./analysis";
 import { CHANNELS, loadBlueRaven, type BlueRavenFlight, type Channel } from "./parsers/blueRaven";
 import { Replay3D, type CameraMode } from "./replay3d";
 import { Charts } from "./charts";
-import { KEY_ROWS, keyNumbersOf, traceFromFlight, traceFromSim, type CompareTrace } from "./compare";
+import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earth";
 import { evaluate, loadDefaultRecovery, saveDefaultRecovery, type RecoveryConfig } from "./recovery";
@@ -41,9 +41,8 @@ let playing = false;
 let lastFrame = 0;
 let lastChartUpdate = 0;
 let gpsOffsetOverride: number | undefined;
-let cmp: CompareTrace | undefined;
+let cmps: ActiveCompare[] = [];
 let lastFiles: InFile[] = [];
-let cmpFiles: InFile[] | undefined;
 let currentEntryId: string | undefined;
 let recovery: RecoveryConfig = loadDefaultRecovery();
 
@@ -84,8 +83,7 @@ async function loadFiles(files: InFile[], entryId?: string) {
     warn.push(...res.warnings);
     if (!res.flight.lr) throw new Error("No Blue Raven LR file found. Include the *_LR_*.csv file.");
     gpsOffsetOverride = undefined;
-    cmp = undefined;
-    cmpFiles = undefined;
+    cmps = [];
     const a = analyze(res.flight);
     warn.push(...a.warnings);
     flight = res.flight;
@@ -124,14 +122,19 @@ async function loadCompare(files: InFile[]) {
   if (!A || !flight) return;
   try {
     const sim = files.find((f) => f.text && isOpenRocket(f.text));
+    let trace: CompareTrace;
     if (sim) {
-      cmp = traceFromSim(parseOpenRocket(sim.text!, sim.name));
+      trace = traceFromSim(parseOpenRocket(sim.text!, sim.name));
     } else {
       const res = await loadBlueRaven(files);
       if (!res.flight.lr) throw new Error("Comparison needs an OpenRocket CSV export or a Blue Raven LR file.");
-      cmp = traceFromFlight(analyze(res.flight), res.flight);
+      trace = traceFromFlight(analyze(res.flight), res.flight);
     }
-    cmpFiles = files;
+    // keep at most 3: the oldest drops off
+    if (cmps.length >= MAX_COMPARES) cmps.shift();
+    const used = new Set(cmps.map((c) => c.color));
+    const color = CMP_COLORS.find((c) => !used.has(c)) ?? CMP_COLORS[0];
+    cmps.push({ id: `${Date.now()}-${Math.random()}`, trace, files, offset: 0, color });
     applyCompare();
     showWarnings(A.warnings);
   } catch (e) {
@@ -141,8 +144,8 @@ async function loadCompare(files: InFile[]) {
 
 function applyCompare() {
   if (!A || !flight) return;
-  charts.setFlight(A, flight, cmp);
-  replay.setCompare(cmp);
+  charts.setFlight(A, flight, cmps);
+  replay.setCompare(cmps);
   renderCompare();
   seek(t);
 }
@@ -163,29 +166,40 @@ async function fetchSample(sn: string): Promise<InFile[]> {
 
 function renderCompare() {
   $("cmp-panel").hidden = !A;
-  $("cmp-clear").hidden = !cmp;
-  if (!A || !cmp) {
+  $("cmp-clear").hidden = cmps.length === 0;
+  $("cmp-sample").hidden = cmps.length >= MAX_COMPARES;
+  if (!A || cmps.length === 0) {
+    $("cmp-list").innerHTML = "";
     $("cmp-table").innerHTML = "";
     $("cmp-notes").textContent = "";
-    $("cmp-sub").textContent = "Overlay an OpenRocket simulation export or another Blue Raven flight. Both are aligned at liftoff.";
+    $("cmp-sub").textContent = "Overlay up to 3 OpenRocket sims or other Blue Raven flights. They are aligned at liftoff.";
     return;
   }
+  $("cmp-sub").textContent = "Dashed lines in the charts and 3D. Shift a comparison in time if its liftoff doesn't line up.";
+  $("cmp-list").innerHTML = cmps
+    .map((c) => `<div class="cmp-item"><i style="background:${c.color}"></i><span class="nm" title="${escapeHtml(c.trace.name)}">${c.trace.kind === "sim" ? "Sim: " : ""}${escapeHtml(c.trace.name)}</span>
+      <label class="off">shift <input type="number" step="0.1" value="${c.offset}" data-off="${c.id}" aria-label="Time shift in seconds" /> s</label>
+      <button class="x" data-rmc="${c.id}" aria-label="Remove comparison">×</button></div>`)
+    .join("");
   const mine = keyNumbersOf(A);
-  $("cmp-sub").innerHTML = `${cmp.kind === "sim" ? "OpenRocket sim" : "Flight"}: <b>${escapeHtml(cmp.name)}</b>, shown pink dashed in charts and 3D`;
+  const single = cmps.length === 1;
   const rows = KEY_ROWS.map(({ k, label, unit }) => {
-    const a = mine[k], b = cmp!.key[k];
-    if (a === null && b === null) return "";
+    const a = mine[k];
+    const others = cmps.map((c) => c.trace.key[k]);
+    if (a === null && others.every((b) => b === null)) return "";
     let diff = "";
-    if (a !== null && b !== null && Number.isFinite(a) && Number.isFinite(b)) {
+    const b = others[0];
+    if (single && a !== null && b !== null && Number.isFinite(a) && Number.isFinite(b)) {
       const d = a - b;
       const rel = Math.abs(b) > 1e-6 ? Math.abs(d / b) : 0;
-      diff = `<span class="diff${rel > 0.05 ? " big" : ""}">${d >= 0 ? "+" : ""}${fmt(d, unit)}</span>`;
+      diff = `<td><span class="diff${rel > 0.05 ? " big" : ""}">${d >= 0 ? "+" : ""}${fmt(d, unit)}</span></td>`;
     }
-    return `<tr><td>${label}</td><td>${fmt(a, unit)}</td><td>${fmt(b, unit)}</td><td>${diff}</td><td class="unit">${unit}</td></tr>`;
+    return `<tr><td>${label}</td><td>${fmt(a, unit)}</td>${others.map((o) => `<td>${fmt(o, unit)}</td>`).join("")}${single ? diff || "<td></td>" : ""}<td class="unit">${unit}</td></tr>`;
   }).join("");
-  $("cmp-table").innerHTML = `<tr><th>Metric</th><th>This flight</th><th>${cmp.kind === "sim" ? "Sim" : "Other"}</th><th>Δ</th><th></th></tr>${rows}`;
-  const notes = [...cmp.notes];
-  if (cmp.path && cmp.compass !== A.compass) notes.push("3D heading is not aligned between the two (only one has GPS or position data).");
+  const heads = cmps.map((c) => `<th><i class="sw" style="background:${c.color}"></i></th>`).join("");
+  $("cmp-table").innerHTML = `<tr><th>Metric</th><th>This</th>${heads}${single ? "<th>Δ</th>" : ""}<th></th></tr>${rows}`;
+  const notes = [...new Set(cmps.flatMap((c) => c.trace.notes))];
+  if (cmps.some((c) => c.trace.path && c.trace.compass !== A!.compass)) notes.push("3D heading isn't aligned for comparisons without GPS or position data.");
   $("cmp-notes").innerHTML = notes.map((n) => `<div>${escapeHtml(n)}</div>`).join("");
 }
 
@@ -224,8 +238,8 @@ function showFlight() {
   scrub.max = String(A.tEnd);
   scrub.step = "0.002";
   replay.setFlight(A, flight);
-  replay.setCompare(cmp);
-  charts.setFlight(A, flight, cmp);
+  replay.setCompare(cmps);
+  charts.setFlight(A, flight, cmps);
   renderCompare();
   $("lg-x").textContent = A.compass ? "East" : "Downrange";
   $("lg-z").textContent = A.compass ? "North" : "Crossrange";
@@ -574,7 +588,21 @@ $("cmp-sample").addEventListener("click", async () => {
   setBusy(true);
   try { await loadCompare(await fetchSample("SN1742")); } finally { setBusy(false); }
 });
-$("cmp-clear").addEventListener("click", () => { cmp = undefined; cmpFiles = undefined; applyCompare(); });
+$("cmp-clear").addEventListener("click", () => { cmps = []; applyCompare(); });
+$("cmp-list").addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest("[data-rmc]") as HTMLElement | null;
+  if (!b) return;
+  cmps = cmps.filter((c) => c.id !== b.dataset.rmc);
+  applyCompare();
+});
+$("cmp-list").addEventListener("change", (e) => {
+  const el = e.target as HTMLInputElement;
+  const c = cmps.find((x) => x.id === el.dataset.off);
+  const v = parseFloat(el.value);
+  if (!c || !Number.isFinite(v)) return;
+  c.offset = v;
+  applyCompare();
+});
 
 $("rec-sections").addEventListener("input", (e) => {
   const el = e.target as HTMLInputElement;
@@ -631,9 +659,10 @@ $("save-open").addEventListener("click", async () => {
   $<HTMLInputElement>("save-name").value = existing?.name ?? flight.gps?.name ?? flight.name;
   $<HTMLInputElement>("save-date").value = existing?.date ?? flightDate();
   $<HTMLTextAreaElement>("save-notes").value = existing?.notes ?? "";
-  const simOk = !existing && cmp?.kind === "sim" && !!cmpFiles;
+  const sims = cmps.filter((c) => c.trace.kind === "sim");
+  const simOk = !existing && sims.length > 0;
   $("save-sim-row").hidden = !simOk;
-  if (simOk) $("save-sim-label").textContent = `Also save the sim "${cmp!.name}"`;
+  if (simOk) $("save-sim-label").textContent = sims.length === 1 ? `Also save the sim "${sims[0].trace.name}"` : `Also save the ${sims.length} sims being compared`;
   const kb = lastFiles.reduce((n, f) => n + (f.buffer?.byteLength ?? f.text?.length ?? 0), 0) / 1024;
   $("save-files").textContent = `${lastFiles.length} files (${kb > 1024 ? (kb / 1024).toFixed(1) + " MB" : kb.toFixed(0) + " KB"}): ${lastFiles.map((f) => f.name).join(", ")}`;
   saveDlg.showModal();
@@ -656,13 +685,15 @@ $("save-form").addEventListener("submit", async (e) => {
   };
   try {
     await putEntry(entry);
-    if (!$("save-sim-row").hidden && $<HTMLInputElement>("save-sim").checked && cmp && cmpFiles) {
-      await putEntry({
-        id: newId(), kind: "sim", name: cmp.name, date, notes: `Sim for ${name}`,
-        savedAt: new Date().toISOString(),
-        stats: { apogee: cmp.key.apogee, flightTime: cmp.key.flightTime, drift: cmp.key.drift, maxVel: cmp.key.maxVel },
-        files: cmpFiles,
-      });
+    if (!$("save-sim-row").hidden && $<HTMLInputElement>("save-sim").checked) {
+      for (const c of cmps.filter((x) => x.trace.kind === "sim")) {
+        await putEntry({
+          id: newId(), kind: "sim", name: c.trace.name, date, notes: `Sim for ${name}`,
+          savedAt: new Date().toISOString(),
+          stats: { apogee: c.trace.key.apogee, flightTime: c.trace.key.flightTime, drift: c.trace.key.drift, maxVel: c.trace.key.maxVel },
+          files: c.files,
+        });
+      }
     }
     currentEntryId = entry.id;
     $("save-open").textContent = "Edit saved flight";

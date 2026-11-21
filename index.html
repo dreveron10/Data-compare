@@ -105,12 +105,13 @@
         <div class="panel" id="cmp-panel" hidden>
           <h3>Compare</h3>
           <div class="muted small" id="cmp-sub">Overlay an OpenRocket simulation export or another Blue Raven flight. Both are aligned at liftoff.</div>
+          <div id="cmp-list"></div>
           <table class="metrics cmp" id="cmp-table"></table>
           <div class="muted small" id="cmp-notes"></div>
           <div class="cmp-actions">
-            <label class="btn small-btn">Open sim or flight<input id="cmp-input" type="file" multiple accept=".csv,.xlsx" hidden /></label>
+            <label class="btn small-btn">Add sim or flight<input id="cmp-input" type="file" multiple accept=".csv,.xlsx" hidden /></label>
             <button class="btn small-btn" id="cmp-sample">Sample flight: SN1742</button>
-            <button class="btn small-btn" id="cmp-clear" hidden>Remove</button>
+            <button class="btn small-btn" id="cmp-clear" hidden>Remove all</button>
           </div>
         </div>
         <div class="panel" id="gps-panel" hidden>

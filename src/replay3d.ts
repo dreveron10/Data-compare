@@ -8,7 +8,7 @@ import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import type { Analysis } from "./analysis";
 import { indexAt, lowerBound } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
-import { sampleAt, type CompareTrace } from "./compare";
+import { sampleAt, type ActiveCompare } from "./compare";
 import { EarthTerrain } from "./earth";
 
 export type CameraMode = "follow" | "overview" | "ground";
@@ -133,8 +133,7 @@ export class Replay3D {
   private skyTex: THREE.Texture;
   /** Earth view availability and loading progress: available=false when there is no GPS */
   onSatellite?: (available: boolean, progress: number) => void;
-  private cmpMarker?: THREE.Mesh;
-  private cmp?: CompareTrace;
+  private cmpMarkers: { mesh: THREE.Mesh; c: ActiveCompare }[] = [];
   private a?: Analysis;
   private f?: BlueRavenFlight;
   private t = 0;
@@ -475,8 +474,8 @@ export class Replay3D {
     }
   }
 
-  /** Draw a comparison path (sim or another flight) with a marker that moves in sync. */
-  setCompare(cmp?: CompareTrace) {
+  /** Draw comparison paths (sims or other flights), each with a marker that moves in sync. */
+  setCompare(cmps: ActiveCompare[] = []) {
     this.cmpGroup.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose?.();
@@ -486,34 +485,38 @@ export class Replay3D {
     this.cmpGroup.clear();
     this.lineMats = this.lineMats.filter((m) => !m.userData.cmp);
     this.labels = this.labels.filter((l) => !l.userData.cmp);
-    this.cmp = cmp;
-    this.cmpMarker = undefined;
-    if (!cmp?.path || !this.a) return;
-    const p = cmp.path;
-    const pos: number[] = [];
-    const step = Math.max(1, Math.floor(p.t.length / 3000));
-    for (let i = 0; i < p.t.length; i += step) pos.push(p.x[i], p.y[i], p.z[i]);
-    const geo = new LineGeometry();
-    geo.setPositions(pos);
-    const mat = new LineMaterial({ color: 0xff9de2, linewidth: 2.5, transparent: true, opacity: 0.85, dashed: true, dashSize: 60, gapSize: 35 });
-    mat.userData.cmp = true;
-    mat.resolution.set(this.host.clientWidth, this.host.clientHeight);
-    this.lineMats.push(mat);
-    const line = new Line2(geo, mat);
-    line.computeLineDistances();
-    this.cmpGroup.add(line);
-    let iA = 0;
-    for (let i = 0; i < p.y.length; i++) if (p.y[i] > p.y[iA]) iA = i;
-    const sameFrame = cmp.compass === this.a.compass;
-    const label = textSprite(`${cmp.kind === "sim" ? "Sim" : cmp.name} apogee ${p.y[iA].toFixed(0)} ft${sameFrame ? "" : " (heading not aligned)"}`, "#ff9de2");
-    label.position.set(p.x[iA], p.y[iA], p.z[iA]);
-    label.userData.small = true;
-    label.userData.offset = true;
-    label.userData.cmp = true;
-    this.labels.push(label);
-    this.cmpGroup.add(label);
-    this.cmpMarker = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xff9de2 }));
-    this.cmpGroup.add(this.cmpMarker);
+    this.cmpMarkers = [];
+    if (!this.a) return;
+    for (const c of cmps) {
+      const p = c.trace.path;
+      if (!p) continue;
+      const col = new THREE.Color(c.color);
+      const pos: number[] = [];
+      const step = Math.max(1, Math.floor(p.t.length / 3000));
+      for (let i = 0; i < p.t.length; i += step) pos.push(p.x[i], p.y[i], p.z[i]);
+      const geo = new LineGeometry();
+      geo.setPositions(pos);
+      const mat = new LineMaterial({ color: col.getHex(), linewidth: 2.5, transparent: true, opacity: 0.85, dashed: true, dashSize: 60, gapSize: 35 });
+      mat.userData.cmp = true;
+      mat.resolution.set(this.host.clientWidth, this.host.clientHeight);
+      this.lineMats.push(mat);
+      const line = new Line2(geo, mat);
+      line.computeLineDistances();
+      this.cmpGroup.add(line);
+      let iA = 0;
+      for (let i = 0; i < p.y.length; i++) if (p.y[i] > p.y[iA]) iA = i;
+      const sameFrame = c.trace.compass === this.a.compass;
+      const label = textSprite(`${c.trace.kind === "sim" ? "Sim" : c.trace.name} apogee ${p.y[iA].toFixed(0)} ft${sameFrame ? "" : " (heading not aligned)"}`, c.color);
+      label.position.set(p.x[iA], p.y[iA], p.z[iA]);
+      label.userData.small = true;
+      label.userData.offset = true;
+      label.userData.cmp = true;
+      this.labels.push(label);
+      this.cmpGroup.add(label);
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: col.getHex() }));
+      this.cmpGroup.add(mesh);
+      this.cmpMarkers.push({ mesh, c });
+    }
     this.setTime(this.t);
   }
 
@@ -612,13 +615,14 @@ export class Replay3D {
     this.dropLine.computeLineDistances();
     this.groundRing.position.set(pos.x, 1, pos.z);
 
-    if (this.cmpMarker && this.cmp?.path) {
+    if (this.cmpMarkers.length) {
       const lift = this.a.events.find((e) => e.key === "liftoff")?.t ?? 0;
-      const p = this.cmp.path;
-      const tc = Math.min(p.t[p.t.length - 1], Math.max(p.t[0], t - lift));
-      this.cmpMarker.position.set(sampleAt(p.t, p.x, tc), sampleAt(p.t, p.y, tc), sampleAt(p.t, p.z, tc));
-    }
-  }
+      for (const { mesh, c } of this.cmpMarkers) {
+        const p = c.trace.path!;
+        const tc = Math.min(p.t[p.t.length - 1], Math.max(p.t[0], t - lift - c.offset));
+        mesh.position.set(sampleAt(p.t, p.x, tc), sampleAt(p.t, p.y, tc), sampleAt(p.t, p.z, tc));
+      }
+    }  }
 
   private frame() {
     if (this.a) {
@@ -642,7 +646,7 @@ export class Replay3D {
         this.chute.position.copy(this.rocket.position).add(new THREE.Vector3(0, len * 0.9 + s, 0));
       }
       this.groundRing.scale.setScalar(Math.max(15, camDist * 0.02));
-      if (this.cmpMarker) this.cmpMarker.scale.setScalar(Math.max(5, this.camera.position.distanceTo(this.cmpMarker.position) * 0.008));
+      for (const { mesh } of this.cmpMarkers) mesh.scale.setScalar(Math.max(5, this.camera.position.distanceTo(mesh.position) * 0.008));
       for (const o of this.worldGroup.children) {
         if (o.userData.marker) o.scale.setScalar(Math.max(6, this.camera.position.distanceTo(o.position) * 0.006));
       }

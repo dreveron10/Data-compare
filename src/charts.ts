@@ -4,16 +4,15 @@ import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import type { Analysis, FlightEvent } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
-import { sampleAt, type CompareTrace } from "./compare";
+import { sampleAt, type ActiveCompare } from "./compare";
 
-const CMP_COLOR = "#ff9de2";
-
-/** resample a comparison series onto x (flight time), aligned at liftoff */
+/** resample a comparison series onto x (flight time), aligned at liftoff plus the comparison's offset */
 function onBase(x: ArrayLike<number>, lift: number, t: ArrayLike<number>, y: ArrayLike<number>) {
   const out = new Float32Array(x.length);
   for (let i = 0; i < x.length; i++) out[i] = sampleAt(t, y, x[i] - lift);
   return out;
 }
+const cmpName = (c: ActiveCompare) => (c.trace.kind === "sim" ? `Sim: ${c.trace.name}` : c.trace.name);
 
 interface ChartDef {
   title: string;
@@ -37,7 +36,7 @@ export class Charts {
     this.ro.observe(host);
   }
 
-  setFlight(a: Analysis, f: BlueRavenFlight, cmp?: CompareTrace) {
+  setFlight(a: Analysis, f: BlueRavenFlight, cmps: ActiveCompare[] = []) {
     this.plots.forEach((p) => p.destroy());
     this.plots = [];
     this.host.innerHTML = "";
@@ -45,7 +44,7 @@ export class Charts {
     const lr = f.lr!;
     const hr = f.hr;
     const lift = a.events.find((e) => e.key === "liftoff")?.t ?? 0;
-    const cmpLabel = cmp ? (cmp.kind === "sim" ? `Sim: ${cmp.name}` : `Compare: ${cmp.name}`) : "";
+    const sh = (c: ActiveCompare) => lift + c.offset;
     const defs: ChartDef[] = [
       {
         title: "Altitude", yLabel: "ft", x: lr.t,
@@ -54,7 +53,7 @@ export class Charts {
           { label: "Baro AGL (filtered)", data: a.altSmooth, color: "#5cc8ff", width: 2, unit: "ft" },
           { label: "Inertial altitude", data: lr.inAlt, color: "#b48cff", width: 1.5, dash: [6, 4], unit: "ft" },
           ...(a.gps ? [{ label: "GPS altitude AGL", data: a.gps.altOnLR, color: "#ffffff", width: 1.5, dash: [2, 3], unit: "ft" }] : []),
-          ...(cmp?.alt ? [{ label: cmpLabel, data: onBase(lr.t, lift, cmp.t, cmp.alt), color: CMP_COLOR, width: 2, dash: [8, 4], unit: "ft" }] : []),
+          ...cmps.filter((c) => c.trace.alt).map((c) => ({ label: cmpName(c), data: onBase(lr.t, sh(c), c.trace.t, c.trace.alt!), color: c.color, width: 2, dash: [8, 4], unit: "ft" })),
         ],
       },
       {
@@ -64,10 +63,23 @@ export class Charts {
           { label: "Inertial vertical", data: lr.velUp, color: "#7bd88f", width: 1.5, unit: "ft/s" },
           { label: "Inertial total", data: a.totalVel, color: "#f5c26b", width: 1.5, unit: "ft/s" },
           ...(a.gps ? [{ label: "GPS vertical", data: a.gps.vertVOnLR, color: "#ffffff", width: 1.5, dash: [2, 3], unit: "ft/s" }] : []),
-          ...(cmp?.vVert ? [{ label: `${cmpLabel} (vertical)`, data: onBase(lr.t, lift, cmp.t, cmp.vVert), color: CMP_COLOR, width: 2, dash: [8, 4], unit: "ft/s" }] : []),
+          ...cmps.filter((c) => c.trace.vVert).map((c) => ({ label: `${cmpName(c)} (vertical)`, data: onBase(lr.t, sh(c), c.trace.t, c.trace.vVert!), color: c.color, width: 2, dash: [8, 4], unit: "ft/s" })),
         ],
       },
     ];
+    // altitude difference: comparison minus this flight, same time
+    const withAlt = cmps.filter((c) => c.trace.alt);
+    if (withAlt.length) {
+      defs.splice(1, 0, {
+        title: "Altitude difference (comparison minus this flight)", yLabel: "ft", x: lr.t,
+        series: withAlt.map((c) => {
+          const other = onBase(lr.t, sh(c), c.trace.t, c.trace.alt!);
+          const d = new Float32Array(lr.n);
+          for (let i = 0; i < lr.n; i++) d[i] = other[i] - a.altSmooth[i];
+          return { label: cmpName(c), data: d, color: c.color, width: 1.8, unit: "ft" };
+        }),
+      });
+    }
     if (a.gps && f.gps) {
       defs.push({
         title: "GPS drift", yLabel: "ft", y2Label: "ft/s", x: a.gps.t,
@@ -90,7 +102,7 @@ export class Charts {
         series: [
           { label: "Axial", data: a.axialAccel, color: "#ff7a90", width: 1, unit: "g" },
           { label: "Magnitude", data: a.accelMag, color: "rgba(207,214,228,0.55)", width: 1, unit: "g" },
-          ...(cmp?.acc && cmp.accT ? [{ label: cmpLabel, data: onBase(hr.t, lift, cmp.accT, cmp.acc), color: CMP_COLOR, width: 1.5, dash: [8, 4], unit: "g" }] : []),
+          ...cmps.filter((c) => c.trace.acc && c.trace.accT).map((c) => ({ label: cmpName(c), data: onBase(hr.t, sh(c), c.trace.accT!, c.trace.acc!), color: c.color, width: 1.5, dash: [8, 4], unit: "g" })),
         ],
       });
     }
