@@ -5,6 +5,8 @@ import { Replay3D, type CameraMode } from "./replay3d";
 import { Charts } from "./charts";
 import { loadAndAnalyze } from "./background";
 import { findFindings } from "./findings";
+import { descentPhases, rateVsAltitude } from "./descent";
+import uPlot from "uplot";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earth";
@@ -260,6 +262,7 @@ function showFlight() {
   renderFindings();
   renderMetrics();
   renderRecovery();
+  renderDescent();
   renderGps();
   renderEvents();
   renderSettings();
@@ -285,6 +288,40 @@ function renderMetrics() {
     return `<tr${m.note ? ` title="${escapeHtml(m.note)}"` : ""}><td>${escapeHtml(m.label)}</td><td>${fmt(m.site, m.unit)}</td><td>${fmt(m.device, m.unit)}</td><td>${diff}</td><td class="unit">${m.unit}</td></tr>`;
   });
   $("metrics").innerHTML = `<tr><th>Metric</th><th>Site</th><th>Blue Raven</th><th>Δ</th><th></th></tr>${rows.join("")}`;
+}
+
+// ---------- descent ----------
+let descPlot: uPlot | undefined;
+function renderDescent() {
+  $("desc-panel").hidden = !A;
+  if (!A || !flight) return;
+  const weight = recovery.sections.reduce((n, s) => n + (s.massLb > 0 ? s.massLb : 0), 0) || null;
+  const phases = descentPhases(flight, A, weight);
+  $("desc-sub").textContent = weight
+    ? `CdA uses ${weight.toFixed(1)} lb, the total of the recovery sections. Air density comes from the logged pressure and temperature.`
+    : "Enter section masses in the recovery check to estimate parachute CdA.";
+  $("desc-table").innerHTML = phases.length
+    ? `<tr><th>Phase</th><th>Rate</th><th>At sea level</th><th>CdA</th></tr>${phases
+        .map((p) => `<tr title="${p.altTop.toFixed(0)} to ${p.altBottom.toFixed(0)} ft, T+${p.t0.toFixed(1)} to ${p.t1.toFixed(1)} s"><td>${p.name}<small class="muted" style="display:block">${p.altTop.toFixed(0)} to ${p.altBottom.toFixed(0)} ft</small></td><td>${p.rate.toFixed(1)} ft/s</td><td>${p.seaLevelRate.toFixed(1)} ft/s</td><td>${p.cdA !== null ? p.cdA.toFixed(1) + " ft²" : "-"}</td></tr>`)
+        .join("")}`
+    : '<tr><td class="muted">No steady descent found.</td></tr>';
+  const { x, y } = rateVsAltitude(flight, A);
+  descPlot?.destroy();
+  const host = $("desc-chart");
+  host.innerHTML = "";
+  if (x.length < 5) return;
+  descPlot = new uPlot({
+    width: Math.max(220, host.clientWidth || 320),
+    height: 170,
+    legend: { show: false },
+    cursor: { y: false },
+    scales: { x: { time: false } },
+    axes: [
+      { stroke: "#8d9bb8", label: "Altitude AGL (ft)", labelSize: 20, size: 34, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: "#8d9bb8", label: "Descent rate (ft/s)", labelSize: 20, size: 44, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+    ],
+    series: [{}, { stroke: "#6cc4ff", width: 1.5, points: { show: false } }],
+  }, [x, y], host);
 }
 
 // ---------- findings ----------
@@ -337,6 +374,7 @@ function renderRecovery() {
 
 async function recoveryChanged() {
   renderRecoveryTableOnly();
+  renderDescent();
   if (currentEntryId) {
     const e = await getEntry(currentEntryId);
     if (e) await putEntry({ ...e, recovery });

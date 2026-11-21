@@ -329,3 +329,8 @@ mark { background: rgba(255, 122, 26, 0.28); color: inherit; border-radius: 2px;
 .findings .ft { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
 .findings .ft span { font-family: var(--num); font-weight: 500; color: var(--muted); white-space: nowrap; }
 .findings .fd { color: var(--muted); margin-top: 2px; line-height: 1.35; }
+
+/* descent */
+.metrics.desc td:nth-child(n+2), .metrics.desc th:nth-child(n+2) { text-align: right; }
+#desc-chart { margin-top: 8px; }
+#desc-chart .u-legend { display: none; }
