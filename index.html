@@ -164,6 +164,16 @@
             <div class="muted small" id="wind-sub"></div>
             <table class="metrics wind" id="wind-table"></table>
           </div>
+          <div id="whatif" hidden>
+            <h3 class="sub-h">Landing what-if</h3>
+            <div class="muted small" id="whatif-sub"></div>
+            <div class="coast-in whatif-in">
+              <label class="fld sm">Main altitude (ft)<input id="wi-main" type="number" min="0" step="50" inputmode="decimal" /></label>
+              <label class="fld sm">Drogue rate (ft/s)<input id="wi-drogue" type="number" min="1" step="1" inputmode="decimal" /></label>
+              <label class="fld sm">Main rate (ft/s)<input id="wi-mrate" type="number" min="1" step="0.5" inputmode="decimal" /></label>
+            </div>
+            <div class="whatif-out" id="whatif-out"></div>
+          </div>
           <div id="chute">
             <h3 class="sub-h">Chute sizing</h3>
             <div class="muted small" id="chute-sub"></div>

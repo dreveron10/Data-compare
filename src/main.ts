@@ -14,6 +14,7 @@ import { ejectionTimes } from "./ejection";
 import { aeroSeries } from "./aero";
 import { buildExport } from "./exportAll";
 import { diameterFor, diameterFromCdA } from "./chute";
+import { predictLanding } from "./predict";
 import { vMaxFor } from "./recovery";
 import { startTour, tourSeen } from "./tour";
 import { getVehicle, setVehicle, vehicleKeyOf, vehicleNames } from "./vehicle";
@@ -379,6 +380,7 @@ function escapeHtml(s: string) {
 // ---------- render a loaded flight ----------
 function showFlight() {
   if (!A || !flight) return;
+  whatIf = null;
   app.classList.remove("empty");
   const lr = flight.lr!;
   showFlightTitle();
@@ -450,6 +452,7 @@ function renderDescent() {
         .join("")}`
     : '<tr><td class="muted">No steady descent found.</td></tr>';
   renderWind();
+  renderWhatIf();
   renderChute(phases, weight);
   renderCoast();
   renderMotor();
@@ -471,6 +474,54 @@ function renderDescent() {
     series: [{}, { stroke: "#6cc4ff", width: 1.5, points: { show: false } }],
   }, [x.map((v) => conv(v, "ft")[0]), y.map((v) => conv(v, "ft/s")[0])], host);
 }
+
+// ---------- landing what-if ----------
+let whatIf: { main: number; drogue: number; mrate: number } | null = null; // user's values for this flight
+function renderWhatIf() {
+  const w = flight?.gps && A ? windProfile(flight.gps, A) : null;
+  $("whatif").hidden = !w || !A?.gps;
+  if (!w || !A?.gps || !flight?.gps) return;
+  const g = flight.gps, al = A.gps;
+  // start once the first chute has settled: before that the rocket still carries sideways speed
+  // from the arc over (on bullet bill that was another 640 ft after apogee), which wind can't explain
+  const apoT = A.events.find((e) => e.key === "apogee")?.t ?? al.apogeeT;
+  const firstFire = Math.min(...A.events.filter((e) => e.key.startsWith("fire_") && e.t >= apoT - 1).map((e) => e.t), Infinity);
+  const t0 = Math.max(apoT + 2, (Number.isFinite(firstFire) ? firstFire : apoT) + 4);
+  let i = 0;
+  while (i < g.n - 1 && al.t[i] < t0) i++;
+  const start = { east: g.east[i], north: g.north[i], alt: A.altSmooth[indexAt(flight.lr!.t, al.t[i])] };
+  const k = keyNumbersOf(A);
+  const flown = { main: k.mainAlt ?? 0, drogue: Math.abs(k.drogueRate ?? 100), mrate: Math.abs(k.mainRate ?? 20) };
+  const v = whatIf ?? flown;
+  const ins: [string, number, string][] = [["wi-main", v.main, "ft"], ["wi-drogue", v.drogue, "ft/s"], ["wi-mrate", v.mrate, "ft/s"]];
+  for (const [id, x, u] of ins) if (document.activeElement?.id !== id) $<HTMLInputElement>(id).value = conv(x, u)[0].toFixed(u === "ft" ? 0 : 1);
+  $("wi-main").parentElement!.firstChild!.textContent = `Main altitude (${cu("ft")})`;
+  $("wi-drogue").parentElement!.firstChild!.textContent = `Drogue rate (${cu("ft/s")})`;
+  $("wi-mrate").parentElement!.firstChild!.textContent = `Main rate (${cu("ft/s")})`;
+  const check = predictLanding(w, start, flown.main, flown.drogue, flown.mrate);
+  const p = predictLanding(w, start, v.main, v.drogue, v.mrate);
+  const L = al.landing;
+  const err = Math.hypot(check.east - g.east[g.n - 1], check.north - g.north[g.n - 1]);
+  $("whatif-sub").textContent = `Drifts down through this flight's measured winds, starting where the first chute had settled (T+${al.t[i].toFixed(1)}, ${show(start.alt, "ft")}). With the flown settings it lands ${show(err, "ft")} from where the rocket really landed, which is the model's error on this flight.`;
+  const same = !whatIf;
+  $("whatif-out").innerHTML = `<div class="land-top"><span class="land-arrow" style="transform:rotate(${p.bearing.toFixed(0)}deg)" aria-hidden="true">↑</span><div><div class="land-dist">${show(p.distance, "ft")}</div><div class="muted small">from the pad toward ${compassName(p.bearing)} (${p.bearing.toFixed(0)}°), ${p.descentS.toFixed(0)} s from there to touchdown${same ? "" : `. Flown: ${show(L.distance, "ft")}, ${(p.distance - L.distance >= 0 ? "+" : "")}${show(p.distance - L.distance, "ft")}`}</div></div></div>${same ? "" : '<button class="btn small-btn" id="wi-reset" type="button">Back to the flown values</button>'}`;
+}
+for (const id of ["wi-main", "wi-drogue", "wi-mrate"]) {
+  $(id).addEventListener("change", () => {
+    const n = (k: string, u: string) => { const x = parseFloat($<HTMLInputElement>(k).value); return Number.isFinite(x) && x >= 0 ? x / conv(1, u)[0] : null; };
+    const k = A ? keyNumbersOf(A) : null;
+    const next = {
+      main: n("wi-main", "ft") ?? k?.mainAlt ?? 0,
+      drogue: Math.max(1, n("wi-drogue", "ft/s") ?? 100),
+      mrate: Math.max(1, n("wi-mrate", "ft/s") ?? 20),
+    };
+    // a blur with nothing changed must not re-render (it would swallow a click on the reset button)
+    if (whatIf && JSON.stringify(next) === JSON.stringify(whatIf)) return;
+    whatIf = next;
+    renderWhatIf();
+  });
+}
+$("whatif-out").addEventListener("click", (e) => { if ((e.target as HTMLElement).id === "wi-reset") { whatIf = null; renderWhatIf(); } });
 
 // ---------- chute sizing ----------
 type ChuteCfg = { dv: number; mv: number | null; dcd: number; mcd: number };

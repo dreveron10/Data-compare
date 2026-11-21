@@ -87,3 +87,20 @@ describe("helpers", () => {
     expect(whatChanged(A, B, "X")).toMatch(/^Against X, this flight /);
   });
 });
+
+import { predictLanding } from "../../src/predict";
+describe("landing what-if", async () => {
+  const { f, a } = await sample("SN0614");
+  const w = windProfile(f.gps!, a)!;
+  const k = keyNumbersOf(a);
+  it("lands near the real landing with the flown settings", () => {
+    const p = predictLanding(w, { east: 0, north: 0, alt: k.apogee! }, k.mainAlt!, Math.abs(k.drogueRate!), Math.abs(k.mainRate!));
+    expect(p.distance).toBeGreaterThan(500);
+    expect(p.bearing).toBeGreaterThan(0);
+  });
+  it("a lower main drifts less", () => {
+    const hi = predictLanding(w, { east: 0, north: 0, alt: 4000 }, 800, 100, 20);
+    const lo = predictLanding(w, { east: 0, north: 0, alt: 4000 }, 400, 100, 20);
+    expect(lo.distance).toBeLessThan(hi.distance);
+  });
+});
