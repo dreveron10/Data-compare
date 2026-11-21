@@ -22,6 +22,8 @@ export interface LibraryEntry {
     /** from the accelerometer, using the vehicle masses at save time */
     coastCd?: number | null; impulseNs?: number | null;
     maxQ?: number | null; maxMach?: number | null;
+    /** altimeter health: battery on the pad, lowest in flight, and data-quality warnings */
+    padBattV?: number | null; minBattV?: number | null; dataWarnings?: number | null;
   };
   files: StoredFile[];
   /** recovery check setup for this vehicle (section masses, limits) */

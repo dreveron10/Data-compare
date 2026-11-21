@@ -800,8 +800,22 @@ function coastInput() {
 function measuredStats() {
   if (!A || !flight) return {};
   const aero = aeroSeries(flight, A);
-  const out: { coastCd?: number | null; impulseNs?: number | null; maxQ?: number | null; maxMach?: number | null } = {
+  const lr = flight.lr!;
+  const lift = A.events.find((e) => e.key === "liftoff")?.t ?? 0;
+  const land = A.events.find((e) => e.key === "landing")?.t ?? lr.t[lr.n - 1];
+  let pad = NaN, low = Infinity;
+  for (let i = 0; i < lr.n; i++) {
+    const v = lr.battV[i];
+    if (!Number.isFinite(v)) continue;
+    if (lr.t[i] < lift) pad = v; else if (lr.t[i] <= land) low = Math.min(low, v);
+  }
+  const dataWarnings = findFindings(flight, A).filter((x) => /Gaps in|clipped|overloaded|clock|UNIX time|lost satellites|drifted from GPS/i.test(x.title)).length;
+  const out: {
+    coastCd?: number | null; impulseNs?: number | null; maxQ?: number | null; maxMach?: number | null;
+    padBattV?: number | null; minBattV?: number | null; dataWarnings?: number | null;
+  } = {
     maxQ: aero?.maxQ ?? null, maxMach: aero?.maxMach ?? null,
+    padBattV: Number.isFinite(pad) ? pad : null, minBattV: Number.isFinite(low) ? low : null, dataWarnings,
   };
   if (flight.hr && A.axialAccel) {
     const cc = coastCfg(), mc = motorCfg();
@@ -1837,6 +1851,7 @@ $("lib-log").addEventListener("click", () => {
     ["Drogue rate (ft/s)", (e) => e.stats.drogueRate], ["Main deploy (ft)", (e) => e.stats.mainAlt], ["Main rate (ft/s)", (e) => e.stats.mainRate],
     ["Flight time (s)", (e) => e.stats.flightTime], ["Drift (ft)", (e) => e.stats.drift], ["GPS", (e) => (e.stats.hasGps ? "yes" : "")],
     ["Coast Cd", (e) => e.stats.coastCd], ["Measured impulse (N·s)", (e) => e.stats.impulseNs],
+    ["Battery on pad (V)", (e) => e.stats.padBattV], ["Lowest battery (V)", (e) => e.stats.minBattV], ["Data warnings", (e) => e.stats.dataWarnings],
     ["Tags", (e) => (e.tags ?? []).join("; ")], ["Notes", (e) => e.notes],
   ];
   const cell = (v: string | number | null | undefined) => {
@@ -1939,14 +1954,14 @@ async function renderTrends() {
     scales: { x: { time: true, range: (_u, mn, mx) => [mn - pad, mx + pad] } },
     axes: [
       { stroke: axisColor(), grid: { stroke: gridColor(), width: 1 }, font: "12px Barlow, system-ui" },
-      { stroke: axisColor(), grid: { stroke: gridColor(), width: 1 }, label: cu(unit), labelSize: 20, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
+      { stroke: axisColor(), grid: { stroke: gridColor(), width: 1 }, label: unit === "count" ? "warnings" : cu(unit), labelSize: 20, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
     ],
     series: [
       { label: "Date" },
       ...groups.map((g, i) => ({
         label: g, stroke: TREND_COLORS[i % TREND_COLORS.length], width: 1.5, spanGaps: true,
         points: { show: true, size: 9, fill: TREND_COLORS[i % TREND_COLORS.length] },
-        value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(unit === "" ? 2 : unit === "g" || unit === "s" ? 1 : 0)} ${cu(unit)}`),
+        value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(unit === "" ? 2 : unit === "V" ? 2 : unit === "g" || unit === "s" ? 1 : 0)} ${unit === "count" ? "" : cu(unit)}`),
       })),
     ],
   }, data as uPlot.AlignedData, host);
@@ -1955,8 +1970,8 @@ async function renderTrends() {
     const ys = pts.filter((p) => gname(p.e) === g).map((p) => conv(p.y, unit)[0]);
     const mean = ys.reduce((a, b) => a + b, 0) / ys.length;
     const sd = Math.sqrt(ys.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, ys.length - 1));
-    const d = unit === "" ? 2 : unit === "g" || unit === "s" ? 2 : 0;
-    return `<tr><td><i class="sw" style="background:${TREND_COLORS[i % TREND_COLORS.length]}"></i> ${escapeHtml(g)}</td><td>${ys.length}</td><td>${mean.toFixed(d)}</td><td>${ys.length > 1 ? sd.toFixed(d) : "-"}</td><td>${Math.min(...ys).toFixed(d)}</td><td>${Math.max(...ys).toFixed(d)}</td><td class="unit">${cu(unit)}</td></tr>`;
+    const d = unit === "count" ? 1 : unit === "" || unit === "V" ? 2 : unit === "g" || unit === "s" ? 2 : 0;
+    return `<tr><td><i class="sw" style="background:${TREND_COLORS[i % TREND_COLORS.length]}"></i> ${escapeHtml(g)}</td><td>${ys.length}</td><td>${mean.toFixed(d)}</td><td>${ys.length > 1 ? sd.toFixed(d) : "-"}</td><td>${Math.min(...ys).toFixed(d)}</td><td>${Math.max(...ys).toFixed(d)}</td><td class="unit">${unit === "count" ? "" : cu(unit)}</td></tr>`;
   }).join("");
   $("tr-table").innerHTML = `<tr><th>Group</th><th>Flights</th><th>Mean</th><th>Spread (1σ)</th><th>Min</th><th>Max</th><th><span class="sr-only">Unit</span></th></tr>${rows}`;
 }
