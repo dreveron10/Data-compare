@@ -692,7 +692,17 @@ function railHtml(): string {
   const re = railExit(flight, A, rail);
   if (!re) return `<div class="wide"><span class="k">Rail exit speed</span><span class="v">-</span><span class="k">Couldn't find first motion in the accelerometer.</span></div>`;
   const ok = re.v >= SL_MIN_RAIL_EXIT;
-  return `<div class="wide"><span class="k">Rail exit speed (${show(rail, "ft", 1)} of rail travel)</span><span class="v ${ok ? "ok" : "bad"}">${show(re.v, "ft/s", 0)}</span><span class="k">${ok ? "Above" : "Below"} the ${show(SL_MIN_RAIL_EXIT, "ft/s")} Student Launch minimum. Left the rail ${(re.t - re.start).toFixed(2)} s after first motion. Set the rail travel in the Vehicle card.</span></div>`;
+  // angle of attack the ground wind puts on the rocket as it leaves the rail: the reason it weathercocks
+  let aoa = "";
+  const w = flight.gps ? windProfile(flight.gps, A) : null;
+  if (w) {
+    const low = w.bins[w.bins.length - 1];
+    const deg = (Math.atan2(low.speed, re.v) * 180) / Math.PI;
+    const boT = A.events.find((e) => e.key === "burnout")?.t;
+    const tiltBo = boT !== undefined ? flight.lr!.tilt[indexAt(flight.lr!.t, boT)] : null;
+    aoa = `<div class="wide"><span class="k">Angle of attack at rail exit</span><span class="v">${deg.toFixed(1)}°</span><span class="k">${show(low.speed * 0.681818, "mph")} of wind at ${conv(low.lo, "ft")[0].toFixed(0)}-${show(low.hi, "ft")} (GPS drift) across ${show(re.v, "ft/s")}. The rocket turns into the wind by about this much${tiltBo !== null ? `; it was tilted ${tiltBo.toFixed(1)}° at burnout` : ""}. A faster rail exit or a longer rail lowers it.</span></div>`;
+  }
+  return `<div class="wide"><span class="k">Rail exit speed (${show(rail, "ft", 1)} of rail travel)</span><span class="v ${ok ? "ok" : "bad"}">${show(re.v, "ft/s", 0)}</span><span class="k">${ok ? "Above" : "Below"} the ${show(SL_MIN_RAIL_EXIT, "ft/s")} Student Launch minimum. Left the rail ${(re.t - re.start).toFixed(2)} s after first motion. Set the rail travel in the Vehicle card.</span></div>${aoa}`;
 }
 
 // ---------- motor (thrust from the accelerometer) ----------
