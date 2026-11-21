@@ -10,6 +10,7 @@ import { windProfile, compassName } from "./wind";
 import { coastDrag } from "./coast";
 import { thrustCurve } from "./thrust";
 import { calibHint } from "./calib";
+import { ejectionTimes } from "./ejection";
 import { startTour, tourSeen } from "./tour";
 import { getVehicle, setVehicle, vehicleKeyOf } from "./vehicle";
 import { checkSettings } from "./settingsCheck";
@@ -751,10 +752,15 @@ function reanalyze() {
 
 function renderEvents() {
   const p = A!.path;
+  const ej = new Map(ejectionTimes(flight!, A!).map((x) => [x.key, x]));
   $("events").innerHTML = A!.events
     .map((e, i) => {
       const alt = p.y[indexAt(p.t, e.t)];
-      return `<li data-t="${e.t}" tabindex="0"><span class="num">${i < 9 ? i + 1 : ""}</span><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${show(alt, "ft")}</span><span class="t">T+${e.t.toFixed(2)} s</span></li>`;
+      const x = ej.get(e.key);
+      const shock = x
+        ? `<span class="ej${x.delay === null ? " none" : x.delay > 0.5 ? " slow" : ""}" title="Jolt: first acceleration spike after the fire (the charge separating the airframe). Biggest load: largest spike in the next 6 s, usually the parachute opening.">${x.delay === null ? "no jolt seen within 3 s" : `jolt +${x.delay.toFixed(2)} s, ${x.peakG!.toFixed(0)} g`}${x.openT !== null && x.openG! > (x.peakG ?? 0) * 1.5 ? `; biggest load ${x.openG!.toFixed(0)} g at +${x.openT.toFixed(1)} s` : ""}</span>`
+        : "";
+      return `<li data-t="${e.t}" tabindex="0"><span class="num">${i < 9 ? i + 1 : ""}</span><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${show(alt, "ft")}</span><span class="t">T+${e.t.toFixed(2)} s</span>${shock}</li>`;
     })
     .join("");
 }

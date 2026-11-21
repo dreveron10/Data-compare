@@ -539,3 +539,8 @@ li[tabindex="0"] { cursor: pointer; }
 .pre-body { max-height: min(68vh, 680px); overflow: auto; padding-right: 4px; }
 .pre-chans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 18px; margin-top: 10px; }
 .veh-notes { margin-top: 8px; }
+/* ejection timing under fire events */
+.events li { flex-wrap: wrap; }
+.events li .ej { flex-basis: 100%; padding-left: 34px; margin-top: -2px; font-size: 11.5px; color: var(--muted); }
+.events li .ej.slow { color: #f5c26b; }
+.events li .ej.none { color: var(--signal); }
