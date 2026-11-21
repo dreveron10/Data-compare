@@ -19,6 +19,9 @@ export interface LibraryEntry {
   stats: {
     apogee?: number | null; flightTime?: number | null; drift?: number | null; maxVel?: number | null; hasGps?: boolean;
     drogueRate?: number | null; mainRate?: number | null; maxAccel?: number | null; mainAlt?: number | null;
+    /** from the accelerometer, using the vehicle masses at save time */
+    coastCd?: number | null; impulseNs?: number | null;
+    maxQ?: number | null; maxMach?: number | null;
   };
   files: StoredFile[];
   /** recovery check setup for this vehicle (section masses, limits) */

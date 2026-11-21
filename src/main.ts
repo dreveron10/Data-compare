@@ -11,6 +11,7 @@ import { coastDrag } from "./coast";
 import { thrustCurve } from "./thrust";
 import { calibHint } from "./calib";
 import { ejectionTimes } from "./ejection";
+import { aeroSeries } from "./aero";
 import { startTour, tourSeen } from "./tour";
 import { getVehicle, setVehicle, vehicleKeyOf } from "./vehicle";
 import { checkSettings } from "./settingsCheck";
@@ -548,6 +549,23 @@ function coastInput() {
   renderCoast(false);
   renderMotor(false);
   renderVehicle();
+}
+
+/** accelerometer and air-data numbers kept with a saved flight so the library can trend them */
+function measuredStats() {
+  if (!A || !flight) return {};
+  const aero = aeroSeries(flight, A);
+  const out: { coastCd?: number | null; impulseNs?: number | null; maxQ?: number | null; maxMach?: number | null } = {
+    maxQ: aero?.maxQ ?? null, maxMach: aero?.maxMach ?? null,
+  };
+  if (flight.hr && A.axialAccel) {
+    const cc = coastCfg(), mc = motorCfg();
+    const m = cc.massLb ?? recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
+    const cd = coastDrag(flight, A, m, cc.diaIn)?.cd50 ?? null;
+    out.coastCd = cd;
+    out.impulseNs = thrustCurve(flight, A, m, mc.propLb ?? 0, cc.diaIn, cd ?? 0.45)?.impulseNs ?? null;
+  }
+  return out;
 }
 
 // ---------- vehicle card ----------
@@ -1476,7 +1494,7 @@ $("save-form").addEventListener("submit", async (e) => {
     kind: "flight", name, date, notes, vehicle, motor, tags,
     savedAt: new Date().toISOString(),
     stats: { apogee: k.apogee, flightTime: k.flightTime, drift: k.drift, maxVel: k.maxVel, hasGps: !!flight.gps,
-      drogueRate: k.drogueRate, mainRate: k.mainRate, maxAccel: k.maxAccel, mainAlt: k.mainAlt },
+      drogueRate: k.drogueRate, mainRate: k.mainRate, maxAccel: k.maxAccel, mainAlt: k.mainAlt, ...measuredStats() },
     files: lastFiles,
     recovery,
     marks,
@@ -1594,7 +1612,7 @@ async function renderTrends() {
   const gname = (e: LibraryEntry) => (groupBy === "none" ? "All flights" : (groupBy === "vehicle" ? e.vehicle : e.motor) || "Not set");
   const groups = [...new Set(pts.map((p) => gname(p.e)))];
   const missing = all.length - pts.length;
-  $("tr-note").textContent = `${pts.length} flight${pts.length === 1 ? "" : "s"} plotted.${missing ? ` ${missing} saved before this metric was recorded or without the data (open and re-save them to include).` : ""}`;
+  $("tr-note").textContent = `${pts.length} flight${pts.length === 1 ? "" : "s"} plotted.${missing ? ` ${missing} saved before this metric was recorded or without the data (open and re-save them to include).` : ""}${key === "coastCd" || key === "impulseNs" ? " Uses the Vehicle card masses as they were when each flight was saved." : ""}`;
   trendPlot?.destroy();
   trendPlot = undefined;
   const host = $("tr-chart");
@@ -1626,7 +1644,7 @@ async function renderTrends() {
       ...groups.map((g, i) => ({
         label: g, stroke: TREND_COLORS[i % TREND_COLORS.length], width: 1.5, spanGaps: true,
         points: { show: true, size: 9, fill: TREND_COLORS[i % TREND_COLORS.length] },
-        value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(unit === "g" || unit === "s" ? 1 : 0)} ${cu(unit)}`),
+        value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(unit === "" ? 2 : unit === "g" || unit === "s" ? 1 : 0)} ${cu(unit)}`),
       })),
     ],
   }, data as uPlot.AlignedData, host);
@@ -1635,7 +1653,7 @@ async function renderTrends() {
     const ys = pts.filter((p) => gname(p.e) === g).map((p) => conv(p.y, unit)[0]);
     const mean = ys.reduce((a, b) => a + b, 0) / ys.length;
     const sd = Math.sqrt(ys.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, ys.length - 1));
-    const d = unit === "g" || unit === "s" ? 2 : 0;
+    const d = unit === "" ? 2 : unit === "g" || unit === "s" ? 2 : 0;
     return `<tr><td><i class="sw" style="background:${TREND_COLORS[i % TREND_COLORS.length]}"></i> ${escapeHtml(g)}</td><td>${ys.length}</td><td>${mean.toFixed(d)}</td><td>${ys.length > 1 ? sd.toFixed(d) : "-"}</td><td>${Math.min(...ys).toFixed(d)}</td><td>${Math.max(...ys).toFixed(d)}</td><td class="unit">${cu(unit)}</td></tr>`;
   }).join("");
   $("tr-table").innerHTML = `<tr><th>Group</th><th>Flights</th><th>Mean</th><th>Spread (1σ)</th><th>Min</th><th>Max</th><th><span class="sr-only">Unit</span></th></tr>${rows}`;
