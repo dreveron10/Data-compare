@@ -32,7 +32,8 @@ import { checkSettings } from "./settingsCheck";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
 import { isGenericAlt, parseGenericAlt } from "./parsers/genericAlt";
-import { isGpsLog, isGpsSummary } from "./parsers/featherweightGps";
+import { isGpsLog, isGpsSummary, parseGpsLog } from "./parsers/featherweightGps";
+import { gpsOnlyHtml } from "./gpsOnly";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
@@ -192,6 +193,21 @@ async function fromFileList(list: FileList | File[]) {
   if (files.length > 0 && files.every((f) => f.buffer && /\.xlsx$/i.test(f.name))) {
     preflight(files[0]);
     return;
+  }
+  // a GPS tracker log with no Blue Raven: show what the GPS alone can tell
+  const gpsLogs = files.filter((f) => f.text && isGpsLog(f.text));
+  if (gpsLogs.length && files.every((f) => f.text && (isGpsLog(f.text) || isGpsSummary(f.text)))) {
+    if (!flight) {
+      try {
+        const g = parseGpsLog(gpsLogs[0].text!, gpsLogs[0].name.replace(/\.[^.]+$/, ""));
+        const { html, gpx } = gpsOnlyHtml(g);
+        $("gpsonly-title").textContent = `GPS tracker flight: ${g.name}`;
+        $("gpsonly-body").innerHTML = html;
+        $("gpsonly-body").querySelector("[data-gpx]")?.addEventListener("click", () => downloadBlob(`${fileSlug(g.name)}.gpx`, new Blob([gpx], { type: "application/gpx+xml" })));
+        $<HTMLDialogElement>("gpsonly-dialog").showModal();
+      } catch (e) { showWarnings([`${gpsLogs[0].name}: ${(e as Error).message}`]); }
+      return;
+    }
   }
   // another brand of altimeter: it can be compared against a Blue Raven flight, not opened alone
   const notBR = files.length > 0 && files.every((f) => f.text && identifyText(f.text) === "unknown" && !isOpenRocket(f.text) && !isGpsLog(f.text) && !isGpsSummary(f.text) && isGenericAlt(f.text));
@@ -2068,3 +2084,4 @@ $("rec-btn").addEventListener("click", () => recordVideo());
 initPreflight(showWarnings);
 initOffline();
 initHelp();
+$("gpsonly-close").addEventListener("click", () => $<HTMLDialogElement>("gpsonly-dialog").close());

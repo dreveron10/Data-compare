@@ -325,6 +325,14 @@
       <button class="btn small-btn primary" id="backup-now" type="button">Export backup</button>
       <button class="btn small-btn" id="backup-later" type="button">Later</button>
     </div>
+    <dialog id="gpsonly-dialog" class="dlg wide">
+      <div class="dlg-head">
+        <h2 class="dlg-title" id="gpsonly-title">GPS tracker flight</h2>
+        <button class="btn small-btn" id="gpsonly-close">Close</button>
+      </div>
+      <p class="muted small">Only a GPS log was opened. Add the Blue Raven files from the same flight for the full replay and analysis.</p>
+      <div id="gpsonly-body"></div>
+    </dialog>
     <dialog id="pre-dialog" class="dlg wide">
       <div class="dlg-head">
         <h2 class="dlg-title">Pre-flight settings check</h2>

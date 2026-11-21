@@ -37,3 +37,10 @@ test("pre-flight settings check from the XLSX alone", async ({ page }) => {
   await expect(page.locator("#pre-dialog")).toBeVisible();
   await expect(page.locator("#pre-sub")).toContainText("4 warnings and 2 notes");
 });
+
+test("GPS log on its own opens the GPS-only summary", async ({ page }) => {
+  await page.goto("/");
+  await page.setInputFiles("#file-input", ["public/samples/SN0614/gps.csv", "public/samples/SN0614/gps_summary.csv"]);
+  await expect(page.locator("#gpsonly-dialog")).toBeVisible();
+  await expect(page.locator("#gpsonly-body")).toContainText("4167 ft");
+});
