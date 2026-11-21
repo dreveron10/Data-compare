@@ -483,3 +483,8 @@ h2.wl-h { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
 :where(button, a, [role="button"], [tabindex="0"]):focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 6px; }
 li[tabindex="0"] { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
+
+/* comparison summary */
+.cmp-summary { margin: 8px 0 4px; display: grid; gap: 6px; }
+.cmp-summary p { margin: 0; font-size: 13.5px; line-height: 1.5; color: #d6deec; max-width: 62ch; }
+.cmp-summary .sw { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin: 0 7px 3px 0; vertical-align: middle; }

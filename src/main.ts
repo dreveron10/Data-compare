@@ -10,7 +10,7 @@ import { windProfile, compassName } from "./wind";
 import { coastDrag } from "./coast";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
-import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
+import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earth";
 import { evaluate, loadDefaultRecovery, saveDefaultRecovery, type RecoveryConfig } from "./recovery";
@@ -228,6 +228,7 @@ function renderCompare() {
     $("cmp-list").innerHTML = "";
     $("cmp-table").innerHTML = "";
     $("cmp-notes").textContent = "";
+    $("cmp-summary").innerHTML = "";
     $("cmp-sub").textContent = "Overlay up to 3 OpenRocket sims or other Blue Raven flights. They are aligned at liftoff.";
     $("cmp-align").hidden = true;
     return;
@@ -245,6 +246,10 @@ function renderCompare() {
       <button class="x" data-rmc="${c.id}" aria-label="Remove comparison">×</button></div>`)
     .join("");
   const mine = keyNumbersOf(A);
+  const cname = (c: ActiveCompare) => (c.trace.kind === "sim" ? `the sim ${c.trace.name}` : c.trace.name);
+  $("cmp-summary").innerHTML = cmps
+    .map((c) => `<p><i class="sw" style="background:${c.color}"></i>${escapeHtml(whatChanged(mine, c.trace.key, cname(c)))}</p>`)
+    .join("");
   const single = cmps.length === 1;
   const rows = KEY_ROWS.map(({ k, label, unit }) => {
     const a = mine[k];
@@ -1189,7 +1194,7 @@ async function buildReport() {
   const cmpBlock = cmps.length
     ? `<section><h2>Comparison</h2><p>Lined up at ${ALIGN_NAME[alignAt]}${cmps.some((c) => c.offset) ? `; shifts: ${cmps.map((c) => `${e(c.trace.name)} ${c.offset >= 0 ? "+" : ""}${c.offset.toFixed(2)} s`).join(", ")}` : ""}.</p><table><tr><th>Metric</th><th class="n">This flight</th>${cmps.map((c) => `<th class="n">${e(c.trace.kind === "sim" ? "Sim: " + c.trace.name : c.trace.name)}</th>`).join("")}<th><span class="sr-only">Unit</span></th></tr>${KEY_ROWS.map(
         ({ k, label, unit }) => `<tr><td>${label}</td><td class="n">${fmt(mine[k], unit)}</td>${cmps.map((c) => `<td class="n">${fmt(c.trace.key[k], unit)}</td>`).join("")}<td>${cu(unit)}</td></tr>`,
-      ).join("")}</table></section>`
+      ).join("")}</table>${cmps.map((c) => `<p>${e(whatChanged(mine, c.trace.key, c.trace.kind === "sim" ? `the sim ${c.trace.name}` : c.trace.name))}</p>`).join("")}</section>`
     : "";
   const shot3d = replay.snapshot();
   const figs = await charts.snapshots(["Altitude", "Velocity", "Acceleration", "Attitude", "Roll rate"]);

@@ -5,6 +5,7 @@ import type { Analysis } from "./analysis";
 import { indexAt, lowerBound } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
 import type { SimData } from "./parsers/openRocket";
+import { conv } from "./units";
 
 export interface KeyNumbers {
   apogee: number | null; // ft AGL
@@ -202,4 +203,45 @@ export function sampleAt(t: ArrayLike<number>, y: ArrayLike<number>, x: number):
   const t0 = t[i - 1], t1 = t[i];
   const u = t1 > t0 ? (x - t0) / (t1 - t0) : 0;
   return y[i - 1] + (y[i] - y[i - 1]) * u;
+}
+
+/**
+ * One plain sentence on how this flight differs from a comparison: the biggest relative
+ * differences first, then which numbers agree. Thresholds: under 5% counts as a match.
+ */
+export function whatChanged(mine: KeyNumbers, other: KeyNumbers, otherName: string): string {
+  type Row = { k: keyof KeyNumbers; more: string; less: string; unit: string; abs?: boolean; digits?: number; noun: string };
+  const rows: Row[] = [
+    { k: "apogee", more: "peaked {d} higher", less: "peaked {d} lower", unit: "ft", noun: "apogee" },
+    { k: "maxVel", more: "was {d} faster at peak", less: "was {d} slower at peak", unit: "ft/s", noun: "top speed" },
+    { k: "maxAccel", more: "boosted {d} harder", less: "boosted {d} softer", unit: "g", digits: 1, noun: "boost acceleration" },
+    { k: "tApogee", more: "reached apogee {d} later", less: "reached apogee {d} sooner", unit: "s", digits: 1, noun: "time to apogee" },
+    { k: "mainAlt", more: "opened the main {d} higher", less: "opened the main {d} lower", unit: "ft", noun: "main deploy altitude" },
+    { k: "drogueRate", more: "fell {d} faster under drogue", less: "fell {d} slower under drogue", unit: "ft/s", abs: true, noun: "drogue rate" },
+    { k: "mainRate", more: "fell {d} faster under main", less: "fell {d} slower under main", unit: "ft/s", abs: true, digits: 1, noun: "main rate" },
+    { k: "flightTime", more: "flew {d} longer", less: "flew {d} shorter", unit: "s", noun: "flight time" },
+    { k: "drift", more: "drifted {d} farther", less: "drifted {d} less", unit: "ft", noun: "drift" },
+  ];
+  const diffs: { rel: number; text: string }[] = [];
+  const same: string[] = [];
+  for (const r of rows) {
+    let a = mine[r.k], b = other[r.k];
+    if (a === null || b === null || !Number.isFinite(a) || !Number.isFinite(b) || Math.abs(b) < 1e-6) continue;
+    if (r.abs) { a = Math.abs(a); b = Math.abs(b); }
+    const d = a - b;
+    const rel = d / Math.abs(b);
+    if (Math.abs(rel) < 0.05) { same.push(r.noun); continue; }
+    const [v, u] = conv(Math.abs(d), r.unit);
+    const txt = (d > 0 ? r.more : r.less).replace("{d}", `${v.toFixed(r.digits ?? 0)} ${u}`);
+    // a percentage of a tiny base (a main that opened at 50 ft) says nothing; show both values instead
+    const fmtV = (x: number) => `${conv(x, r.unit)[0].toFixed(r.digits ?? 0)}`;
+    const tail = Math.abs(rel) > 2 ? `${fmtV(a)} vs ${fmtV(b)} ${u}` : `${(Math.abs(rel) * 100).toFixed(0)}%`;
+    diffs.push({ rel: Math.abs(rel), text: `${txt} (${tail})` });
+  }
+  diffs.sort((x, y) => y.rel - x.rel);
+  const top = diffs.slice(0, 3).map((x) => x.text);
+  const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+  let s = top.length ? `Against ${otherName}, this flight ${list(top)}.` : `This flight matches ${otherName} within 5% on every number.`;
+  if (top.length && same.length) s += ` ${list(same.slice(0, 3)).replace(/^./, (c) => c.toUpperCase())} ${same.length === 1 ? "matches" : "match"} within 5%.`;
+  return s;
 }
