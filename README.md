@@ -11,7 +11,7 @@ Everything runs in the browser. Files are never uploaded.
 | Device | Files | Status |
 |---|---|---|
 | Featherweight Blue Raven | `*_HR_*.csv`, `*_LR_*.csv`, `*_summary_*.csv`, `BR_deploy_settings_*.xlsx` (optional) | Phase 1 |
-| Featherweight GPS tracker | flight CSV | Planned (Phase 2) |
+| Featherweight GPS tracker | flight CSV, summary CSV (optional) | Phase 2, loaded together with a Blue Raven |
 | Fluctus, RRC3+, OpenRocket CSV | | Planned |
 
 Files are recognized by their headers, not their names, so renamed files still work.
@@ -21,6 +21,7 @@ Files are recognized by their headers, not their names, so renamed files still w
 - **3D replay:** ascent path from the Blue Raven inertial navigation (colored by speed), rocket attitude from the 500 Hz quaternions (tilt and roll), boost flame, parachutes, event markers, and an attitude inset with a roll dial. Camera modes: follow, overview, ground.
 - **Charts:** altitude, velocity, acceleration, tilt, roll rate, battery and pyro channel voltages. Synced cursor and zoom; click to jump the replay to that time.
 - **Summary:** apogee, max velocity, burnout, tilt, roll, descent rates, deploy altitude and fire times. Each value is shown next to what the Blue Raven reported.
+- **GPS (optional):** load the Featherweight GPS tracker CSV with the Blue Raven files. The logs are time aligned automatically (launch detection, refined by matching vertical velocity; manual override available), the scene is rotated to true east/north, the descent follows the real GPS drift, and a Blue Raven vs GPS table compares apogee, velocities, descent rates and drift, with a map link to the landing spot.
 - **Deployment settings:** the condition matrix from the settings XLSX for each channel, with each condition marked met/unmet at the moment the channel fired.
 
 ## How the numbers are computed
@@ -29,7 +30,8 @@ Files are recognized by their headers, not their names, so renamed files still w
 - **Fire times:** taken from the Blue Raven summary first; otherwise from the moment a channel with continuity drops below 1 V; otherwise from the LR `*_fired` flag (which lags the real fire by about 1.4 s).
 - **Descent rates:** linear fits (drogue: apogee + 3 s to main fire; main: main fire + 4 s to landing).
 - **3D heading:** the Blue Raven quaternions are relative to the pad attitude and have no compass heading. The heading is recovered by matching the rocket axis direction to the inertial velocity direction during ascent. Directions are shown as downrange/crossrange, not north/east.
-- **Descent position:** the inertial horizontal position drifts after apogee, so the descent is drawn straight down from apogee (altitude only) until GPS support is added.
+- **Descent position:** the inertial horizontal position drifts after apogee. Without GPS the descent is drawn straight down from apogee (altitude only). With GPS, the descent uses the GPS position and the ascent is blended linearly so it meets the GPS track at apogee.
+- **GPS heading fit:** least-squares rotation of the Blue Raven downrange/crossrange ascent onto the GPS east/north ascent. Altitude in the replay always comes from the Blue Raven baro; GPS altitude is shown separately for comparison.
 
 ## Development
 

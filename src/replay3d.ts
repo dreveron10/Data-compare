@@ -238,6 +238,7 @@ export class Replay3D {
       maxR = Math.max(maxR, Math.hypot(p.x[i], p.z[i]));
       maxY = Math.max(maxY, p.y[i]);
     }
+    if (a.gps) for (let i = 0; i < a.gps.x.length; i++) maxR = Math.max(maxR, Math.hypot(a.gps.x[i], a.gps.z[i]));
     this.extent = Math.max(3000, maxR * 1.6, maxY * 1.2);
 
     // ground + grid
@@ -259,14 +260,15 @@ export class Replay3D {
     padLabel.position.set(0, 120, 0);
     this.addLabel(padLabel);
 
-    // axis arrows at the pad: the Blue Raven has no compass, so directions are downrange/crossrange
+    // axis arrows at the pad. Without GPS the Blue Raven has no compass, so directions are
+    // downrange/crossrange; with GPS the scene is rotated to true east/north.
     const arrowLen = Math.min(1500, this.extent * 0.25);
     const dr = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 6, 0), arrowLen, 0x5cc8ff, arrowLen * 0.08, arrowLen * 0.04);
     const cr = new THREE.ArrowHelper(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 6, 0), arrowLen, 0xf5c26b, arrowLen * 0.08, arrowLen * 0.04);
     this.worldGroup.add(dr, cr);
-    const drL = textSprite("Downrange", "#5cc8ff");
+    const drL = textSprite(a.compass ? "East" : "Downrange", "#5cc8ff");
     drL.position.set(arrowLen * 1.1, 60, 0);
-    const crL = textSprite(`Crossrange${a.frame && a.frame.crSign < 0 ? " (-)" : ""}`, "#f5c26b");
+    const crL = textSprite(a.compass ? "North" : `Crossrange${a.frame && a.frame.crSign < 0 ? " (-)" : ""}`, "#f5c26b");
     crL.position.set(0, 60, -arrowLen * 1.1);
     this.addLabel(drL);
     this.addLabel(crL);
@@ -309,8 +311,41 @@ export class Replay3D {
     this.trail.frustumCulled = false;
     this.worldGroup.add(this.trail);
 
-    // descent: horizontal position is not known (no GPS), so it is drawn straight down from apogee
+    // GPS track (raw GPS position and GPS altitude), for comparison with the fused path
+    if (a.gps) {
+      const gp: number[] = [];
+      for (let i = 0; i < a.gps.x.length; i++) gp.push(a.gps.x[i], a.gps.y[i], a.gps.z[i]);
+      const gGeo = new LineGeometry();
+      gGeo.setPositions(gp);
+      const gMat = new LineMaterial({ color: 0xffffff, linewidth: 1.5, transparent: true, opacity: 0.55, dashed: true, dashSize: 40, gapSize: 30 });
+      this.lineMats.push(gMat);
+      const gLine = new Line2(gGeo, gMat);
+      gLine.computeLineDistances();
+      this.worldGroup.add(gLine);
+      // landing pin with distance
+      const L = a.gps.landing;
+      const li = a.gps.x.length - 1;
+      const pin = new THREE.Mesh(new THREE.ConeGeometry(18, 60, 16), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+      pin.rotation.x = Math.PI;
+      pin.position.set(a.gps.x[li], 30, a.gps.z[li]);
+      this.worldGroup.add(pin);
+      const gl = textSprite(`GPS landing  ${L.distance.toFixed(0)} ft @ ${L.bearing.toFixed(0)}°`, "#ffffff");
+      gl.position.set(a.gps.x[li], 140, a.gps.z[li]);
+      gl.userData.small = true;
+      this.addLabel(gl);
+      const gpsApo = a.gps.rows.find((r) => r.label === "Apogee AGL")?.gps;
+      let gi = 0;
+      for (let i = 0; i < a.gps.y.length; i++) if (a.gps.y[i] > a.gps.y[gi]) gi = i;
+      const ga = textSprite(`GPS apogee ${gpsApo?.toFixed(0)} ft`, "#ffffff");
+      ga.position.set(a.gps.x[gi], a.gps.y[gi], a.gps.z[gi]);
+      ga.userData.small = true;
+      ga.userData.offset = true;
+      this.addLabel(ga);
+    }
+
+    // descent: without GPS the horizontal position is unknown, so it is drawn straight down from apogee
     const apo = new THREE.Vector3(p.x[iA], p.y[iA], p.z[iA]);
+    if (!a.gps) {
     const descGeo = new THREE.BufferGeometry().setFromPoints([apo, new THREE.Vector3(apo.x, 0, apo.z)]);
     const descLine = new THREE.Line(descGeo, new THREE.LineDashedMaterial({ color: COLORS.descent, dashSize: 60, gapSize: 50, transparent: true, opacity: 0.5 }));
     descLine.computeLineDistances();
@@ -319,6 +354,7 @@ export class Replay3D {
     noGps.position.set(apo.x, apo.y * 0.45, apo.z);
     noGps.userData.small = true;
     this.addLabel(noGps);
+    }
 
     // event markers (events within 0.05 s share one marker, e.g. "Main + 4th fired")
     const groups: { t: number; color: string; fires: string[]; others: string[] }[] = [];

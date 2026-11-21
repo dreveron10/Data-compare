@@ -145,3 +145,11 @@ select { background: var(--panel-2); color: var(--text); border: 1px solid var(-
 .u-legend { font-size: 12px; text-align: left; padding-left: 50px; }
 .u-legend .u-marker { border-radius: 2px; }
 .u-select { background: rgba(92, 200, 255, 0.12); }
+
+.gps-landing { margin-top: 10px; font-size: 12.5px; line-height: 1.5; }
+.gps-landing a { color: var(--accent); }
+.offset-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12.5px; }
+.offset-row input { width: 80px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font: inherit; }
+.small-btn { padding: 5px 10px; font-size: 12px; }
+.metrics.cmp td:nth-child(2), .metrics.cmp td:nth-child(3) { min-width: 56px; }
+.legend3d b { font-weight: 400; }

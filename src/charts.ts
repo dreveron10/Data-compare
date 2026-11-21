@@ -41,6 +41,7 @@ export class Charts {
           { label: "Baro AGL (raw)", data: subtract(lr.baroAsl, a.padAsl), color: "rgba(140,160,200,0.45)", width: 1, unit: "ft" },
           { label: "Baro AGL (filtered)", data: a.altSmooth, color: "#5cc8ff", width: 2, unit: "ft" },
           { label: "Inertial altitude", data: lr.inAlt, color: "#b48cff", width: 1.5, dash: [6, 4], unit: "ft" },
+          ...(a.gps ? [{ label: "GPS altitude AGL", data: a.gps.altOnLR, color: "#ffffff", width: 1.5, dash: [2, 3], unit: "ft" }] : []),
         ],
       },
       {
@@ -49,9 +50,26 @@ export class Charts {
           { label: "Baro vertical", data: a.baroVel, color: "#5cc8ff", width: 1.5, unit: "ft/s" },
           { label: "Inertial vertical", data: lr.velUp, color: "#7bd88f", width: 1.5, unit: "ft/s" },
           { label: "Inertial total", data: a.totalVel, color: "#f5c26b", width: 1.5, unit: "ft/s" },
+          ...(a.gps ? [{ label: "GPS vertical", data: a.gps.vertVOnLR, color: "#ffffff", width: 1.5, dash: [2, 3], unit: "ft/s" }] : []),
         ],
       },
     ];
+    if (a.gps && f.gps) {
+      defs.push({
+        title: "GPS drift", yLabel: "ft", y2Label: "ft/s", x: a.gps.t,
+        series: [
+          { label: "Distance from pad", data: f.gps.distance, color: "#ffffff", width: 2, unit: "ft" },
+          { label: "Horizontal speed", data: f.gps.horzV, color: "#5cc8ff", width: 1.2, unit: "ft/s", scale: "y2" },
+        ],
+      });
+      defs.push({
+        title: "GPS signal", yLabel: "sats", y2Label: "dBm", x: a.gps.t,
+        series: [
+          { label: "Satellites", data: f.gps.sats, color: "#7bd88f", width: 1.5, unit: "" },
+          { label: "Radio RSSI", data: f.gps.rssi, color: "#f5c26b", width: 1.2, unit: "dBm", scale: "y2" },
+        ],
+      });
+    }
     if (hr && a.axialAccel && a.accelMag) {
       defs.push({
         title: "Acceleration", yLabel: "g", x: hr.t,
@@ -103,15 +121,19 @@ export class Charts {
       height: 190,
       cursor: { sync: { key: SYNC_KEY }, drag: { x: true, y: false } },
       legend: { live: true },
-      scales: { x: { time: false, min: a.tStart, max: a.tEnd } },
+      scales: { x: { time: false, min: a.tStart, max: a.tEnd }, y: { auto: true }, ...(d.y2Label ? { y2: { auto: true } } : {}) },
       axes: [
         { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: "Flight time (s)", labelSize: 22, font: "11px Inter, system-ui", labelFont: "11px Inter, system-ui" },
         { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: d.yLabel, labelSize: 22, size: 56, font: "11px Inter, system-ui", labelFont: "11px Inter, system-ui" },
+        // every chart reserves a right axis so the time axes line up across charts
+        d.y2Label
+          ? { scale: "y2", side: 1, stroke: "#8a96b0", grid: { show: false }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: d.y2Label, labelSize: 22, size: 56, font: "11px Inter, system-ui", labelFont: "11px Inter, system-ui" }
+          : { scale: "y", side: 1, grid: { show: false }, ticks: { show: false }, values: () => [], size: 78 },
       ],
       series: [
         { label: "t", value: (_u, v) => (v == null ? "-" : `${v.toFixed(2)} s`) },
         ...d.series.map((s) => ({
-          label: s.label, stroke: s.color, width: s.width ?? 1.5, dash: s.dash, points: { show: false },
+          label: s.label, stroke: s.color, width: s.width ?? 1.5, dash: s.dash, points: { show: false }, scale: s.scale ?? "y",
           value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(Math.abs(v) < 20 ? 2 : 0)} ${s.unit}`),
         })),
       ],

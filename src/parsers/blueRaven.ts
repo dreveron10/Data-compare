@@ -6,6 +6,7 @@
 //   BR_deploy_settings_*.xlsx  deployment condition matrix and thresholds
 
 import { unzipSync, strFromU8 } from "fflate";
+import { isGpsLog, isGpsSummary, parseGpsLog, parseGpsSummary, type GpsData } from "./featherweightGps";
 
 export interface HRData {
   n: number;
@@ -68,6 +69,8 @@ export interface BlueRavenFlight {
   lr?: LRData;
   summary?: Summary;
   settings?: DeploySettings;
+  /** optional Featherweight GPS tracker log from the same flight */
+  gps?: GpsData;
 }
 
 export type BRFileKind = "hr" | "lr" | "summary" | "settings" | "unknown";
@@ -316,12 +319,13 @@ export function parseSettings(buf: ArrayBuffer): DeploySettings {
   return { conditions, options, values };
 }
 
-/** Load any mix of Blue Raven files (dropped or fetched) into one flight. */
+/** Load any mix of Blue Raven and Featherweight GPS files (dropped or fetched) into one flight. */
 export async function loadBlueRaven(
   files: { name: string; text?: string; buffer?: ArrayBuffer }[],
 ): Promise<{ flight: BlueRavenFlight; warnings: string[] }> {
   const flight: BlueRavenFlight = { name: "" };
   const warnings: string[] = [];
+  let gpsSummary: Record<string, string> | undefined;
   for (const f of files) {
     if (f.buffer && /\.xlsx$/i.test(f.name)) {
       try { flight.settings = parseSettings(f.buffer); }
@@ -329,6 +333,19 @@ export async function loadBlueRaven(
       continue;
     }
     const text = f.text ?? (f.buffer ? new TextDecoder().decode(f.buffer) : "");
+    if (/\.kml$/i.test(f.name)) {
+      warnings.push(`${f.name}: KML is not needed (the GPS CSV has the same track with correct times), skipped`);
+      continue;
+    }
+    if (isGpsLog(text)) {
+      try { flight.gps = parseGpsLog(text, f.name.replace(/_\d\d-\d\d-\d{4}.*$/, "").replace(/\.csv$/i, "")); }
+      catch (e) { warnings.push(`${f.name}: ${(e as Error).message}`); }
+      continue;
+    }
+    if (isGpsSummary(text)) {
+      gpsSummary = parseGpsSummary(text);
+      continue;
+    }
     const kind = identifyText(text);
     try {
       if (kind === "hr") flight.hr = parseHR(text);
@@ -338,6 +355,12 @@ export async function loadBlueRaven(
     } catch (e) {
       warnings.push(`${f.name}: ${(e as Error).message}`);
     }
+  }
+  if (flight.gps && gpsSummary) {
+    flight.gps.summary = gpsSummary;
+    if (gpsSummary["Rocket Name"]) flight.gps.name = gpsSummary["Rocket Name"];
+  } else if (gpsSummary && !flight.gps) {
+    warnings.push("GPS summary loaded without the GPS flight CSV; include the GPS log to use it.");
   }
   flight.name =
     flight.summary?.raw["Rocket Name"] ??

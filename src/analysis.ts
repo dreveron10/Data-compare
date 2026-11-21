@@ -2,6 +2,7 @@
 
 import { Matrix4, Quaternion, Vector3 } from "three";
 import type { BlueRavenFlight, Channel, HRData, LRData } from "./parsers/blueRaven";
+import type { GpsData } from "./parsers/featherweightGps";
 import { CHANNELS } from "./parsers/blueRaven";
 
 export interface FlightEvent {
@@ -36,7 +37,41 @@ export interface Analysis {
   // 3D replay
   frame?: ReplayFrame;
   path: { t: Float64Array; x: Float32Array; y: Float32Array; z: Float32Array; apogeeIdx: number };
+  /** true when the scene is in true east/north (GPS aligned); otherwise downrange/crossrange */
+  compass: boolean;
+  gps?: GpsAlignment;
   warnings: string[];
+}
+
+export interface GpsAlignment {
+  /** Blue Raven time = GPS time + offset */
+  offset: number;
+  autoOffset: number;
+  manual: boolean;
+  /** rotation applied to the Blue Raven horizontal frame to reach east/north, rad */
+  yaw: number;
+  /** RMS horizontal mismatch between the rotated Blue Raven ascent and the GPS track, ft */
+  ascentRms: number;
+  /** GPS time in Blue Raven time */
+  t: Float64Array;
+  /** GPS track in world coordinates */
+  x: Float32Array; y: Float32Array; z: Float32Array;
+  /** GPS series resampled on the LR time base (NaN outside the GPS log) */
+  altOnLR: Float32Array;
+  vertVOnLR: Float32Array;
+  apogeeAgl: number;
+  apogeeT: number;
+  landingT: number | null;
+  landing: { lat: number; lon: number; distance: number; bearing: number };
+  rows: CompareRow[];
+}
+
+export interface CompareRow {
+  label: string;
+  unit: string;
+  br: number | null;
+  gps: number | null;
+  note?: string;
 }
 
 export interface ReplayFrame {
@@ -127,7 +162,12 @@ const v3 = (a: ArrayLike<number>, i: number) => new Vector3(a[i * 3], a[i * 3 + 
 
 // ---------- main analysis ----------
 
-export function analyze(f: BlueRavenFlight): Analysis {
+export interface AnalyzeOptions {
+  /** force the GPS time offset (s); auto-detected when omitted */
+  gpsOffset?: number;
+}
+
+export function analyze(f: BlueRavenFlight, opts: AnalyzeOptions = {}): Analysis {
   const lr = f.lr;
   const hr = f.hr;
   const warnings: string[] = [];
@@ -296,7 +336,61 @@ export function analyze(f: BlueRavenFlight): Analysis {
     py[i] = Math.max(0, altSmooth[i]);
   }
 
+  // ----- GPS: time alignment, true north, real descent drift -----
+  let gpsA: GpsAlignment | undefined;
+  if (f.gps) {
+    try {
+      gpsA = alignGps(f.gps, lr, gpsCtx(), opts);
+      // rotate the Blue Raven frame into east/north and blend the ascent into the GPS track
+      const c = Math.cos(gpsA.yaw), sn = Math.sin(gpsA.yaw);
+      const rot = (i: number) => {
+        const u = px[i], v = -pz[i];
+        return [u * c - v * sn, u * sn + v * c];
+      };
+      const tApoL = lr.t[iApo];
+      const gApo = gpsUV(f.gps, gpsA, tApoL);
+      const [ua, va] = rot(iApo);
+      const cu = gApo[0] - ua, cv = gApo[1] - va;
+      for (let i = 0; i < lr.n; i++) {
+        let u: number, v: number;
+        if (lr.t[i] < liftoff) { u = 0; v = 0; }
+        else if (i <= iApo) {
+          const w = Math.min(1, Math.max(0, (lr.t[i] - liftoff) / Math.max(0.1, tApoL - liftoff)));
+          [u, v] = rot(i);
+          u += cu * w; v += cv * w;
+        } else {
+          [u, v] = gpsUV(f.gps, gpsA, lr.t[i]);
+        }
+        px[i] = u; pz[i] = -v;
+      }
+      if (frame) {
+        const qYaw = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), gpsA.yaw);
+        const q = new Quaternion();
+        for (let i = 0; i < frame.worldQuat.length / 4; i++) {
+          q.set(frame.worldQuat[i * 4], frame.worldQuat[i * 4 + 1], frame.worldQuat[i * 4 + 2], frame.worldQuat[i * 4 + 3]);
+          q.premultiply(qYaw);
+          frame.worldQuat[i * 4] = q.x; frame.worldQuat[i * 4 + 1] = q.y; frame.worldQuat[i * 4 + 2] = q.z; frame.worldQuat[i * 4 + 3] = q.w;
+        }
+      }
+      // some mismatch is normal (inertial position drifts); a large one means the logs do not belong together
+      const gpsApoDist = gpsA.rows.find((r) => r.label === "Distance at apogee")?.gps ?? 0;
+      if (gpsA.ascentRms > Math.max(400, 0.35 * gpsApoDist)) {
+        warnings.push(`Blue Raven and GPS ascent tracks differ by ${gpsA.ascentRms.toFixed(0)} ft RMS after alignment. Check that both logs are from the same flight and the time offset.`);
+      }
+    } catch (e) {
+      warnings.push(`GPS log could not be aligned: ${(e as Error).message}`);
+      gpsA = undefined;
+    }
+  }
+
+  function gpsCtx() {
+    return { liftoff, tApo, burnout, iApo, altSmooth, crSign, drogueWin: tMain !== null ? [tApo + 3, tMain - 0.5] as [number, number] : null,
+      mainWin: tMain !== null && tLand !== null ? [tMain + 4, tLand - 1] as [number, number] : null, totalVel };
+  }
+
   return {
+    compass: !!gpsA,
+    gps: gpsA,
     tStart: Math.max(lr.t[0], hr ? hr.t[0] : -Infinity),
     tEnd: Math.min(lr.t[lr.n - 1], hr ? hr.t[hr.n - 1] : Infinity),
     events: ev, padAsl, metrics, altSmooth, baroVel, totalVel, axialAccel, accelMag, rollRate, frame,
@@ -389,4 +483,125 @@ function quatAt(hr: HRData, i: number, conv: "q" | "q*") {
   const w = hr.quat[i * 4], x = hr.quat[i * 4 + 1], y = hr.quat[i * 4 + 2], z = hr.quat[i * 4 + 3];
   const q = new Quaternion(x, y, z, w).normalize();
   return conv === "q" ? q : q.invert();
+}
+
+// ---------- GPS alignment ----------
+
+function interp(t: ArrayLike<number>, y: ArrayLike<number>, x: number): number {
+  if (x <= t[0]) return y[0];
+  const n = t.length;
+  if (x >= t[n - 1]) return y[n - 1];
+  const i = lowerBound(t, x);
+  const t0 = t[i - 1], t1 = t[i];
+  const u = t1 > t0 ? (x - t0) / (t1 - t0) : 0;
+  return y[i - 1] + (y[i] - y[i - 1]) * u;
+}
+
+/** GPS east/north (u, v) at Blue Raven time t */
+function gpsUV(g: GpsData, a: { t: Float64Array }, t: number): [number, number] {
+  return [interp(a.t, g.east, t), interp(a.t, g.north, t)];
+}
+
+interface Ctx {
+  liftoff: number; tApo: number; burnout: number | null; iApo: number; altSmooth: Float32Array; crSign: number;
+  drogueWin: [number, number] | null; mainWin: [number, number] | null; totalVel: Float32Array;
+}
+
+function alignGps(g: GpsData, lr: LRData, c: Ctx, opts: AnalyzeOptions): GpsAlignment {
+  // 1) time: both logs are launch-relative; refine by matching vertical velocity during boost and coast
+  const tEndFit = Math.min(c.tApo, (c.burnout ?? c.liftoff + 3) + 6);
+  let best = 0, bestErr = Infinity;
+  for (let d = -3; d <= 3.0001; d += 0.01) {
+    let e = 0, n = 0;
+    for (let i = lowerBound(lr.t, c.liftoff); i < lr.n && lr.t[i] <= tEndFit; i += 2) {
+      const tg = lr.t[i] - d;
+      if (tg < g.t[0] || tg > g.t[g.n - 1]) continue;
+      const r = interp(g.t, g.vertV, tg) - lr.velUp[i];
+      e += r * r; n++;
+    }
+    if (n > 20 && e / n < bestErr) { bestErr = e / n; best = d; }
+  }
+  const autoOffset = Math.round(best * 100) / 100;
+  const manual = opts.gpsOffset !== undefined && Number.isFinite(opts.gpsOffset);
+  const offset = manual ? opts.gpsOffset! : autoOffset;
+  const t = new Float64Array(g.n);
+  for (let i = 0; i < g.n; i++) t[i] = g.t[i] + offset;
+
+  // 2) heading: rotate the Blue Raven (downrange, s*crossrange) plane onto (east, north), least squares
+  let sxx = 0, sxy = 0, cnt = 0;
+  for (let i = lowerBound(lr.t, c.liftoff + 0.5); i <= c.iApo; i++) {
+    if (lr.t[i] < t[0] || lr.t[i] > t[g.n - 1]) continue;
+    const bx = lr.inDR[i], by = c.crSign * lr.inCR[i];
+    const gx = interp(t, g.east, lr.t[i]), gy = interp(t, g.north, lr.t[i]);
+    sxx += bx * gx + by * gy;
+    sxy += bx * gy - by * gx;
+    cnt++;
+  }
+  if (cnt < 10) throw new Error("the GPS log does not overlap the Blue Raven ascent");
+  const yaw = Math.atan2(sxy, sxx);
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  let sq = 0;
+  for (let i = lowerBound(lr.t, c.liftoff + 0.5); i <= c.iApo; i++) {
+    if (lr.t[i] < t[0] || lr.t[i] > t[g.n - 1]) continue;
+    const bx = lr.inDR[i], by = c.crSign * lr.inCR[i];
+    const u = bx * cy - by * sy, v = bx * sy + by * cy;
+    sq += (u - interp(t, g.east, lr.t[i])) ** 2 + (v - interp(t, g.north, lr.t[i])) ** 2;
+  }
+  const ascentRms = Math.sqrt(sq / cnt);
+
+  // 3) GPS track in world coordinates (y from GPS altitude AGL)
+  const x = new Float32Array(g.n), y = new Float32Array(g.n), z = new Float32Array(g.n);
+  for (let i = 0; i < g.n; i++) { x[i] = g.east[i]; y[i] = Math.max(0, g.altAgl[i]); z[i] = -g.north[i]; }
+
+  // 4) resample for charts
+  const altOnLR = new Float32Array(lr.n), vertVOnLR = new Float32Array(lr.n);
+  for (let i = 0; i < lr.n; i++) {
+    const tt = lr.t[i];
+    const inside = tt >= t[0] && tt <= t[g.n - 1];
+    altOnLR[i] = inside ? interp(t, g.altAgl, tt) : NaN;
+    vertVOnLR[i] = inside ? interp(t, g.vertV, tt) : NaN;
+  }
+
+  // 5) comparison
+  let iA = 0;
+  for (let i = 0; i < g.n; i++) if (g.altAgl[i] > g.altAgl[iA]) iA = i;
+  let iL = g.n - 1;
+  if (g.landingT !== null) iL = Math.max(0, lowerBound(g.t, g.landingT));
+  const maxOf = (a: ArrayLike<number>, i0 = 0, i1 = a.length - 1) => { let m = -Infinity; for (let i = i0; i <= i1; i++) if (a[i] > m) m = a[i]; return m; };
+  const iLift = lowerBound(lr.t, c.liftoff);
+  let brMaxH = 0, brMaxV = 0;
+  for (let i = iLift; i <= c.iApo; i++) {
+    brMaxH = Math.max(brMaxH, Math.hypot(lr.velDR[i], lr.velCR[i]));
+    brMaxV = Math.max(brMaxV, lr.velUp[i]);
+  }
+  const gSlope = (w: [number, number] | null) => (w ? slopeOf(t, g.altAgl, w[0], w[1]) : null);
+  const brSlope = (w: [number, number] | null) => (w ? slopeOf(lr.t, c.altSmooth, w[0], w[1]) : null);
+  const landE = g.east[iL], landN = g.north[iL];
+  const rows: CompareRow[] = [
+    { label: "Apogee AGL", unit: "ft", br: c.altSmooth[c.iApo], gps: g.altAgl[iA], note: "Blue Raven: filtered baro. GPS: GPS altitude above its pad reading." },
+    { label: "Time to apogee", unit: "s", br: c.tApo - c.liftoff, gps: t[iA] - c.liftoff },
+    { label: "Max vertical velocity", unit: "ft/s", br: brMaxV, gps: maxOf(g.vertV) },
+    { label: "Max horizontal velocity", unit: "ft/s", br: brMaxH, gps: maxOf(g.horzV, 0, iA + 5), note: "Ascent only" },
+    { label: "Drogue descent rate", unit: "ft/s", br: brSlope(c.drogueWin), gps: gSlope(c.drogueWin), note: "Same time window for both" },
+    { label: "Main descent rate", unit: "ft/s", br: brSlope(c.mainWin), gps: gSlope(c.mainWin), note: "Same time window for both" },
+    { label: "Distance at apogee", unit: "ft", br: null, gps: Math.hypot(g.east[iA], g.north[iA]) },
+    { label: "Drift at landing", unit: "ft", br: null, gps: Math.hypot(landE, landN) },
+  ];
+  return {
+    offset, autoOffset, manual, yaw, ascentRms, t, x, y, z, altOnLR, vertVOnLR,
+    apogeeAgl: g.altAgl[iA], apogeeT: t[iA],
+    landingT: g.landingT !== null ? g.landingT + offset : null,
+    landing: { lat: g.lat[iL], lon: g.lon[iL], distance: Math.hypot(landE, landN), bearing: ((Math.atan2(landE, landN) * 180) / Math.PI + 360) % 360 },
+    rows,
+  };
+}
+
+function slopeOf(t: ArrayLike<number>, y: ArrayLike<number>, t0: number, t1: number): number | null {
+  let n = 0, st = 0, sy = 0, stt = 0, sty = 0;
+  for (let i = lowerBound(t, t0); i < t.length && t[i] <= t1; i++) {
+    n++; st += t[i]; sy += y[i]; stt += t[i] * t[i]; sty += t[i] * y[i];
+  }
+  if (n < 3) return null;
+  const d = n * stt - st * st;
+  return d === 0 ? null : (n * sty - st * sy) / d;
 }

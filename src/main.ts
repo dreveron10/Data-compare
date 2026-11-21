@@ -19,6 +19,7 @@ let t = 0;
 let playing = false;
 let lastFrame = 0;
 let lastChartUpdate = 0;
+let gpsOffsetOverride: number | undefined;
 
 // ---------- roll dial ticks ----------
 {
@@ -40,6 +41,7 @@ async function loadFiles(files: { name: string; text?: string; buffer?: ArrayBuf
     const res = await loadBlueRaven(files);
     warn.push(...res.warnings);
     if (!res.flight.lr) throw new Error("No Blue Raven LR file found. Include the *_LR_*.csv file.");
+    gpsOffsetOverride = undefined;
     const a = analyze(res.flight);
     warn.push(...a.warnings);
     flight = res.flight;
@@ -63,7 +65,7 @@ async function loadSample(sn: string) {
   setBusy(true);
   try {
     const base = `samples/${sn}/`;
-    const names = ["HR.csv", "LR.csv", "summary.csv", "deploy_settings.xlsx"];
+    const names = ["HR.csv", "LR.csv", "summary.csv", "deploy_settings.xlsx", "gps.csv", "gps_summary.csv"];
     const files = await Promise.all(
       names.map(async (n) => {
         const r = await fetch(base + n);
@@ -102,7 +104,10 @@ function showFlight() {
   scrub.step = "0.002";
   replay.setFlight(A, flight);
   charts.setFlight(A, flight);
+  $("lg-x").textContent = A.compass ? "East" : "Downrange";
+  $("lg-z").textContent = A.compass ? "North" : "Crossrange";
   renderMetrics();
+  renderGps();
   renderEvents();
   renderSettings();
   renderScrubEvents();
@@ -127,6 +132,43 @@ function renderMetrics() {
     return `<tr${m.note ? ` title="${escapeHtml(m.note)}"` : ""}><td>${escapeHtml(m.label)}</td><td>${fmt(m.site, m.unit)}</td><td>${fmt(m.device, m.unit)}</td><td>${diff}</td><td class="unit">${m.unit}</td></tr>`;
   });
   $("metrics").innerHTML = `<tr><th>Metric</th><th>Site</th><th>Blue Raven</th><th>Δ</th><th></th></tr>${rows.join("")}`;
+}
+
+function renderGps() {
+  const g = A!.gps;
+  const panel = $("gps-panel");
+  panel.hidden = !g;
+  if (!g || !flight?.gps) return;
+  $("gps-sub").textContent = `${flight.gps.name} · aligned ${g.manual ? "manually" : "automatically"} · heading fit ${(((g.yaw * 180) / Math.PI + 360) % 360).toFixed(0)}° · ascent mismatch ${g.ascentRms.toFixed(0)} ft RMS`;
+  const rows = g.rows.map((r) => {
+    let diff = "";
+    if (r.br !== null && r.gps !== null && Number.isFinite(r.br) && Number.isFinite(r.gps)) {
+      const d = r.br - r.gps;
+      const rel = Math.abs(r.gps) > 1e-6 ? Math.abs(d / r.gps) : 0;
+      diff = `<span class="diff${rel > 0.05 ? " big" : ""}">${d >= 0 ? "+" : ""}${fmt(d, r.unit)}</span>`;
+    }
+    return `<tr${r.note ? ` title="${escapeHtml(r.note)}"` : ""}><td>${escapeHtml(r.label)}</td><td>${fmt(r.br, r.unit)}</td><td>${fmt(r.gps, r.unit)}</td><td>${diff}</td><td class="unit">${r.unit}</td></tr>`;
+  });
+  $("compare").className = "metrics cmp";
+  $("compare").innerHTML = `<tr><th>Metric</th><th>Blue Raven</th><th>GPS</th><th>Δ</th><th></th></tr>${rows.join("")}`;
+  const L = g.landing;
+  const ll = `${L.lat.toFixed(5)}, ${L.lon.toFixed(5)}`;
+  $("gps-landing").innerHTML = `Landing: <b>${L.distance.toFixed(0)} ft</b> from the pad, bearing <b>${L.bearing.toFixed(0)}°</b><br/>` +
+    `<a href="https://www.google.com/maps?q=${encodeURIComponent(ll)}" target="_blank" rel="noopener">${ll} ↗</a>`;
+  $<HTMLInputElement>("gps-offset").value = g.offset.toFixed(2);
+}
+
+function reanalyze() {
+  if (!flight) return;
+  const keep = t;
+  try {
+    A = analyze(flight, { gpsOffset: gpsOffsetOverride });
+    showWarnings(A.warnings);
+    showFlight();
+    seek(keep);
+  } catch (e) {
+    showWarnings([(e as Error).message]);
+  }
 }
 
 function renderEvents() {
@@ -245,9 +287,18 @@ function updateHud(time: number) {
     <div><div class="k">Speed</div><div class="v">${descent ? "-" : spd.toFixed(0) + " ft/s"}</div></div>
     <div><div class="k">Axial accel</div><div class="v">${acc} g</div></div>
     <div><div class="k">Tilt</div><div class="v">${tilt.toFixed(1)}°</div></div>
-    <div><div class="k">Roll rate</div><div class="v">${rr} °/s</div></div>`;
+    <div><div class="k">Roll rate</div><div class="v">${rr} °/s</div></div>${gpsHud(time)}`;
   $("roll-needle").setAttribute("transform", `rotate(${roll})`);
   $("roll-val").textContent = `${roll.toFixed(0)}°`;
+}
+
+function gpsHud(time: number) {
+  const g = A!.gps, d = flight!.gps;
+  if (!g || !d) return "";
+  const k = indexAt(g.t, time);
+  return `
+    <div><div class="k">Drift (GPS)</div><div class="v">${d.distance[k].toFixed(0)} ft</div></div>
+    <div><div class="k">GPS sats</div><div class="v">${d.sats[k]}</div></div>`;
 }
 
 // ---------- playback ----------
@@ -328,6 +379,12 @@ window.addEventListener("drop", (e) => {
   dz.classList.remove("drag");
   if (e.dataTransfer?.files.length) fromFileList(e.dataTransfer.files);
 });
+
+$<HTMLInputElement>("gps-offset").addEventListener("change", (e) => {
+  const v = parseFloat((e.target as HTMLInputElement).value);
+  if (Number.isFinite(v)) { gpsOffsetOverride = v; reanalyze(); }
+});
+$("gps-auto").addEventListener("click", () => { gpsOffsetOverride = undefined; reanalyze(); });
 
 // open a sample straight from the URL, e.g. ?sample=SN0614
 const qs = new URLSearchParams(location.search).get("sample");
