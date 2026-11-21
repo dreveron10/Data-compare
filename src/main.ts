@@ -21,6 +21,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const app = $("app");
 // 3D needs WebGL; without it (old GPUs, some remote browsers) the rest of the site still works
 type ReplayApi = Pick<Replay3D, "setFlight" | "setCompare" | "setTime" | "setCameraMode" | "setSatellite" | "snapshot"> & {
+  onCameraMode?: (mode: CameraMode) => void;
   onSatellite?: (available: boolean, progress: number) => void;
 };
 let replay: ReplayApi;
@@ -635,6 +636,13 @@ function stepSpeed(dir: 1 | -1) {
 }
 function setCam(mode: CameraMode) {
   document.querySelectorAll("[data-cam]").forEach((x) => x.classList.toggle("active", (x as HTMLElement).dataset.cam === mode));
+  if (mode === "tour" && A) {
+    // the tour plays the whole flight from just before liftoff
+    seek(Math.max(A.tStart, (A.events.find((e) => e.key === "liftoff")?.t ?? 0) - 1.5));
+    replay.setCameraMode(mode);
+    play();
+    return;
+  }
   replay.setCameraMode(mode);
 }
 document.addEventListener("keydown", (e) => {
@@ -657,6 +665,7 @@ document.addEventListener("keydown", (e) => {
   else if (k === "f" || k === "F") setCam("follow");
   else if (k === "o" || k === "O") setCam("overview");
   else if (k === "g" || k === "G") setCam("ground");
+  else if (k === "t" || k === "T") setCam("tour");
   else handled = false;
   if (handled) e.preventDefault();
 });
@@ -675,12 +684,9 @@ $("events").addEventListener("click", (e) => {
   if (li?.dataset.t) seek(parseFloat(li.dataset.t));
 });
 document.querySelectorAll<HTMLButtonElement>("[data-cam]").forEach((b) =>
-  b.addEventListener("click", () => {
-    document.querySelectorAll("[data-cam]").forEach((x) => x.classList.remove("active"));
-    b.classList.add("active");
-    replay.setCameraMode(b.dataset.cam as CameraMode);
-  }),
+  b.addEventListener("click", () => setCam(b.dataset.cam as CameraMode)),
 );
+replay.onCameraMode = (mode) => document.querySelectorAll("[data-cam]").forEach((x) => x.classList.toggle("active", (x as HTMLElement).dataset.cam === mode));
 document.querySelectorAll<HTMLButtonElement>("[data-sample]").forEach((b) =>
   b.addEventListener("click", () => loadSample(b.dataset.sample!)),
 );

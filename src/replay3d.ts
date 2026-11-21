@@ -11,7 +11,7 @@ import type { BlueRavenFlight } from "./parsers/blueRaven";
 import { sampleAt, type ActiveCompare } from "./compare";
 import { EarthTerrain } from "./earth";
 
-export type CameraMode = "follow" | "overview" | "ground";
+export type CameraMode = "follow" | "overview" | "ground" | "tour";
 
 const COLORS = {
   bg: 0x0d1524,
@@ -115,6 +115,13 @@ export class Replay3D {
   private groundRing: THREE.Mesh;
   private chute: THREE.Group;
   private mode: CameraMode = "follow";
+  private tourAz = 0;
+  private groundTrack?: Line2;
+  private groundTrackGeo?: LineGeometry;
+  private trackXZ: number[] = []; // x,z pairs of the ground track
+  private trackDraped: number[] | null = null; // terrain heights under the track (Earth view)
+  /** called when the user takes over the camera during a tour */
+  onCameraMode?: (mode: CameraMode) => void;
   private lastRocketPos = new THREE.Vector3();
   private extent = 5000;
 
@@ -151,6 +158,12 @@ export class Replay3D {
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.12;
     this.controls.maxPolarAngle = Math.PI * 0.495;
+    this.controls.addEventListener("start", () => {
+      if (this.mode === "tour") {
+        this.mode = "follow";
+        this.onCameraMode?.("follow");
+      }
+    });
 
     this.scene.fog = new THREE.Fog(COLORS.bg, 20000, 120000);
     {
@@ -303,6 +316,7 @@ export class Replay3D {
         // if nothing could be downloaded (offline, blocked), hide the Earth option entirely
         if (done === total && meshes === 0) this.onSatellite?.(false, 0);
         else this.onSatellite?.(true, done / total);
+        if (done === total && meshes > 0) { this.drapeTrack(); this.applySatellite(); }
       });
     } else {
       this.onSatellite?.(false, 0);
@@ -366,6 +380,19 @@ export class Replay3D {
     this.lineMats.push(trailMat);
     this.trail = new Line2(this.trailGeo, trailMat);
     this.trail.frustumCulled = false;
+
+    // ground track: the flight's shadow on the ground (draped on terrain in Earth view)
+    this.trackXZ = [];
+    for (let i = Math.max(0, iL - 1); i < p.t.length; i += step * 4) this.trackXZ.push(p.x[i], p.z[i]);
+    this.trackXZ.push(p.x[p.t.length - 1], p.z[p.t.length - 1]);
+    this.trackDraped = null;
+    this.groundTrackGeo = new LineGeometry();
+    this.groundTrackGeo.setPositions(this.trackPositions(false));
+    const gtMat = new LineMaterial({ color: 0xff7a1a, linewidth: 3, transparent: true, opacity: 0.75 });
+    this.lineMats.push(gtMat);
+    this.groundTrack = new Line2(this.groundTrackGeo, gtMat);
+    this.groundTrack.frustumCulled = false;
+    this.worldGroup.add(this.groundTrack);
     this.worldGroup.add(this.trail);
 
     // GPS track (raw GPS position and GPS altitude), for comparison with the fused path
@@ -454,8 +481,34 @@ export class Replay3D {
     this.applySatellite();
   }
 
+  /** ground track positions, on flat ground or draped on the terrain */
+  private trackPositions(draped: boolean): number[] {
+    const pos: number[] = [];
+    for (let k = 0; k < this.trackXZ.length / 2; k++) {
+      const y = draped && this.trackDraped ? this.trackDraped[k] + 6 : 2;
+      pos.push(this.trackXZ[k * 2], y, this.trackXZ[k * 2 + 1]);
+    }
+    return pos;
+  }
+
+  /** find the terrain height under each ground-track point */
+  private drapeTrack() {
+    if (!this.earth) return;
+    const ray = new THREE.Raycaster();
+    const down = new THREE.Vector3(0, -1, 0);
+    const meshes = this.earth.group.children;
+    const h: number[] = [];
+    for (let k = 0; k < this.trackXZ.length / 2; k++) {
+      ray.set(new THREE.Vector3(this.trackXZ[k * 2], 60000, this.trackXZ[k * 2 + 1]), down);
+      const hit = ray.intersectObjects(meshes, false)[0];
+      h.push(hit ? hit.point.y : 0);
+    }
+    this.trackDraped = h;
+  }
+
   private applySatellite() {
     const show = !!this.earth && this.earthOn && this.earthReady;
+    if (this.groundTrackGeo) this.groundTrackGeo.setPositions(this.trackPositions(show));
     if (this.earth) this.earth.group.visible = show;
     if (this.grid) this.grid.visible = !show;
     if (this.groundMesh) this.groundMesh.visible = !show;
@@ -538,6 +591,13 @@ export class Replay3D {
       const rp = this.rocket.position;
       this.controls.target.copy(rp);
       this.camera.position.copy(rp).add(new THREE.Vector3(-260, 120, 260));
+    }
+    if (mode === "tour") {
+      // start beside the pad, looking along the flight
+      const p0 = this.rocket.position;
+      const track = new THREE.Vector3(p.x[iA], 0, p.z[iA]);
+      this.tourAz = track.lengthSq() > 1 ? Math.atan2(track.z, track.x) + Math.PI / 2 : 0;
+      this.controls.target.copy(p0);
     }
     if (mode === "ground") {
       const d = Math.max(800, this.extent * 0.3);
@@ -633,6 +693,19 @@ export class Replay3D {
         this.controls.target.add(d);
       } else if (this.mode === "ground") {
         this.controls.target.copy(this.rocket.position);
+      } else if (this.mode === "tour") {
+        // slow orbit around the rocket; distance grows with altitude so the path stays in view
+        const rp = this.rocket.position;
+        const dist = Math.min(3200, Math.max(220, 220 + rp.y * 0.55));
+        const az = this.tourAz + this.t * 0.09;
+        const el = 0.22 + 0.12 * Math.sin(this.t * 0.06);
+        const want = new THREE.Vector3(
+          rp.x + Math.cos(az) * Math.cos(el) * dist,
+          Math.max(rp.y + Math.sin(el) * dist, 30),
+          rp.z + Math.sin(az) * Math.cos(el) * dist,
+        );
+        this.camera.position.lerp(want, 0.06);
+        this.controls.target.lerp(rp, 0.2);
       }
       this.lastRocketPos.copy(this.rocket.position);
 
