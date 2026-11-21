@@ -3,6 +3,7 @@ import { analyze, indexAt, type Analysis } from "./analysis";
 import { CHANNELS, loadBlueRaven, type BlueRavenFlight, type Channel } from "./parsers/blueRaven";
 import { Replay3D, type CameraMode } from "./replay3d";
 import { Charts } from "./charts";
+import { loadAndAnalyze } from "./background";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earth";
@@ -78,13 +79,14 @@ $("sat-toggle").addEventListener("click", () => {
 // ---------- loading ----------
 async function loadFiles(files: InFile[], entryId?: string) {
   const warn: string[] = [];
+  setLoading("Reading flight files");
   try {
-    const res = await loadBlueRaven(files);
+    const res = await loadAndAnalyze(files);
     warn.push(...res.warnings);
-    if (!res.flight.lr) throw new Error("No Blue Raven LR file found. Include the *_LR_*.csv file.");
+    if (!res.flight.lr || !res.analysis) throw new Error("No Blue Raven LR file found. Include the *_LR_*.csv file.");
     gpsOffsetOverride = undefined;
     cmps = [];
-    const a = analyze(res.flight);
+    const a = res.analysis;
     warn.push(...a.warnings);
     flight = res.flight;
     A = a;
@@ -97,6 +99,8 @@ async function loadFiles(files: InFile[], entryId?: string) {
     showFlight();
   } catch (e) {
     warn.unshift((e as Error).message);
+  } finally {
+    setLoading(null);
   }
   showWarnings(warn);
 }
@@ -127,9 +131,10 @@ async function loadCompare(files: InFile[]) {
     if (sim) {
       trace = traceFromSim(parseOpenRocket(sim.text!, sim.name));
     } else {
-      const res = await loadBlueRaven(files);
-      if (!res.flight.lr) throw new Error("Comparison needs an OpenRocket CSV export or a Blue Raven LR file.");
-      trace = traceFromFlight(analyze(res.flight), res.flight);
+      setLoading("Reading comparison flight");
+      const res = await loadAndAnalyze(files).finally(() => setLoading(null));
+      if (!res.flight.lr || !res.analysis) throw new Error("Comparison needs an OpenRocket CSV export or a Blue Raven LR file.");
+      trace = traceFromFlight(res.analysis, res.flight);
     }
     // keep at most 3: the oldest drops off
     if (cmps.length >= MAX_COMPARES) cmps.shift();
@@ -206,11 +211,18 @@ function renderCompare() {
 
 async function loadSample(sn: string) {
   setBusy(true);
+  setLoading("Downloading sample flight");
   try {
     await loadFiles(await fetchSample(sn));
   } finally {
     setBusy(false);
   }
+}
+
+function setLoading(msg: string | null) {
+  const el = $("loading");
+  el.hidden = msg === null;
+  if (msg) $("loading-msg").textContent = msg;
 }
 
 function setBusy(b: boolean) {
