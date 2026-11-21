@@ -334,6 +334,7 @@ function renderRedundancy() {
 function renderCompare() {
   $("cmp-panel").hidden = !A;
   $("cmp-clear").hidden = cmps.length === 0;
+  $("cmp-csv").hidden = cmps.length === 0;
   $("cmp-sample").hidden = cmps.length >= MAX_COMPARES;
   if (!A || cmps.length === 0) {
     $("cmp-list").innerHTML = "";
@@ -2002,6 +2003,42 @@ async function openTogether() {
 }
 
 // the entries currently listed (after search, filter and sort), for the flight log export
+// ---------- comparison as a spreadsheet ----------
+const csvCell = (v: string | number | null | undefined) => {
+  if (v === null || v === undefined || v === "") return "";
+  if (typeof v === "number") return Number.isFinite(v) ? String(Math.round(v * 100) / 100) : "";
+  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
+$("cmp-csv").addEventListener("click", () => {
+  if (!A || !flight || !cmps.length) return;
+  const rows: (string | number | null | undefined)[][] = [];
+  const mine = keyNumbersOf(A);
+  const me = flight.gps?.name ?? flight.name;
+  rows.push(["Key numbers", `lined up at ${ALIGN_NAME[alignAt]}`]);
+  rows.push(["Metric", "Unit", me, ...cmps.map((c) => `${c.trace.kind === "sim" ? "Sim: " : ""}${c.trace.name}`)]);
+  for (const { k, label, unit } of KEY_ROWS) rows.push([label, unit, mine[k], ...cmps.map((c) => c.trace.key[k])]);
+  rows.push(["Time shift", "s", 0, ...cmps.map((c) => c.offset)]);
+  const withSrc = cmps.filter((c) => c.src);
+  if (withSrc.length) {
+    const sl = slRows();
+    const sets = withSrc.map((c) => slRows(c.src!.flight, c.src!.analysis));
+    const v = (r: SLRow | undefined) => (r ? `${r.value}${r.verdict === "fail" ? " (over)" : r.verdict === "pass" ? " (pass)" : ""}` : "");
+    rows.push([]);
+    rows.push(["Student Launch checks", "judged with this flight's Vehicle card and Recovery limits"]);
+    rows.push(["Check", "Limit", me, ...withSrc.map((c) => c.trace.name)]);
+    sl.forEach((r, i) => rows.push([r.label, r.limit, v(r), ...sets.map((s) => v(s.find((x) => x.label === r.label) ?? s[i]))]));
+    for (const c of withSrc.filter((c) => sameFlight(flight!, A!, c.src!.flight, c.src!.analysis))) {
+      const red = redundancy(flight, A, c.src!.flight, c.src!.analysis);
+      rows.push([]);
+      rows.push([`Altimeter agreement with ${c.trace.name}`]);
+      rows.push(["Item", "This unit", "Other unit", "Difference", "Check"]);
+      for (const r of red.rows) rows.push([r.label, r.a, r.b, r.diff, r.flag ? "yes" : ""]);
+    }
+  }
+  const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+  downloadBlob(`${fileSlug(me)}-comparison.csv`, new Blob(["\ufeff" + csv], { type: "text/csv" }));
+});
+
 let libShown: LibraryEntry[] = [];
 $("lib-log").addEventListener("click", () => {
   const cols: [string, (e: LibraryEntry) => string | number | null | undefined][] = [
