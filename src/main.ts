@@ -36,6 +36,7 @@ import { isGpsLog, isGpsSummary, parseGpsLog } from "./parsers/featherweightGps"
 import { gpsOnlyHtml } from "./gpsOnly";
 import { gFromMaterial, parseOrk } from "./parsers/ork";
 import { canopySwing } from "./swing";
+import { redundancy, sameFlight } from "./redundancy";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
@@ -317,6 +318,19 @@ async function fetchSample(sn: string): Promise<InFile[]> {
   return files.filter((x): x is NonNullable<typeof x> => x !== null);
 }
 
+/** two Blue Ravens that flew in the same rocket: an agreement table instead of a flight-to-flight comparison */
+function renderRedundancy() {
+  const pairs = A && flight ? cmps.filter((c) => c.src && sameFlight(flight!, A!, c.src.flight, c.src.analysis)) : [];
+  $("cmp-redund").innerHTML = pairs.map((c) => {
+    const r = redundancy(flight!, A!, c.src!.flight, c.src!.analysis);
+    const bad = r.rows.filter((x) => x.flag).length;
+    return `<details class="redund" open><summary><i class="sw" style="background:${c.color}"></i>Same flight as ${escapeHtml(c.trace.name)}: ${bad ? `${bad} thing${bad === 1 ? "" : "s"} disagree` : "the two altimeters agree"}</summary>
+      <table class="metrics redund-t"><tr><th></th><th>This unit</th><th>Other unit</th><th>Difference</th></tr>${r.rows
+        .map((x) => `<tr class="${x.flag ? "flag" : ""}"><td>${escapeHtml(x.label)}</td><td>${escapeHtml(x.a)}</td><td>${escapeHtml(x.b)}</td><td>${escapeHtml(x.diff)}${x.flag ? '<span class="sr-only"> (disagrees)</span>' : ""}</td></tr>`).join("")}</table>
+      <p class="muted small">Matched on the logger clocks (same date, liftoff within 2 minutes). Baro offset is the median altitude difference from liftoff to landing, skipping 1.5 s around each pyro fire. A steady offset is usually pad altitude or port size; a spread that grows during descent points at a leaky bay or blocked port. Flagged: apogee off by more than 2% (30 ft minimum), fire times more than 0.5 s apart or a channel firing on one unit only.</p>
+    </details>`;
+  }).join("");
+}
 function renderCompare() {
   $("cmp-panel").hidden = !A;
   $("cmp-clear").hidden = cmps.length === 0;
@@ -326,6 +340,7 @@ function renderCompare() {
     $("cmp-table").innerHTML = "";
     $("cmp-notes").textContent = "";
     $("cmp-summary").innerHTML = "";
+    $("cmp-redund").innerHTML = "";
     $("cmp-sub").textContent = "Overlay up to 3 OpenRocket sims or other Blue Raven flights. They are aligned at liftoff.";
     $("cmp-align").hidden = true;
     return;
@@ -350,6 +365,7 @@ function renderCompare() {
     const m = cc.massLb ?? recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
     return coastDrag(flight, A, m, cc.diaIn)?.cd50 ?? null;
   })();
+  renderRedundancy();
   $("cmp-summary").innerHTML = cmps
     .map((c) => {
       const hint = c.trace.kind === "sim" ? calibHint(flight!, A!, c.trace, coastCd) : null;
