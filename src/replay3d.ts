@@ -10,6 +10,7 @@ import { indexAt, lowerBound } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
 import { sampleAt, type ActiveCompare } from "./compare";
 import { EarthTerrain } from "./earth";
+import { show } from "./units";
 
 export type CameraMode = "follow" | "overview" | "ground" | "tour";
 
@@ -67,7 +68,7 @@ function buildRocket(): THREE.Group {
   return g;
 }
 
-function textSprite(text: string, color: string): THREE.Sprite {
+function drawLabel(text: string, color: string): { tex: THREE.CanvasTexture; aspect: number } {
   const c = document.createElement("canvas");
   const ctx = c.getContext("2d")!;
   const font = "600 34px Barlow, system-ui, sans-serif";
@@ -87,9 +88,17 @@ function textSprite(text: string, color: string): THREE.Sprite {
   ctx.fillText(text, 14, 27);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
+  return { tex, aspect: w / 52 };
+}
+
+/** label sprite; pass a function instead of a string for text that depends on display units */
+function textSprite(text: string | (() => string), color: string): THREE.Sprite {
+  const str = typeof text === "function" ? text() : text;
+  const { tex, aspect } = drawLabel(str, color);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  s.userData.aspect = w / 52;
+  s.userData.aspect = aspect;
   s.renderOrder = 10;
+  if (typeof text === "function") { s.userData.textFn = text; s.userData.color = color; }
   return s;
 }
 
@@ -413,14 +422,14 @@ export class Replay3D {
       pin.rotation.x = Math.PI;
       pin.position.set(a.gps.x[li], 30, a.gps.z[li]);
       this.worldGroup.add(pin);
-      const gl = textSprite(`GPS landing  ${L.distance.toFixed(0)} ft @ ${L.bearing.toFixed(0)}°`, "#ffffff");
+      const gl = textSprite(() => `GPS landing  ${show(L.distance, "ft")} @ ${L.bearing.toFixed(0)}°`, "#ffffff");
       gl.position.set(a.gps.x[li], 140, a.gps.z[li]);
       gl.userData.small = true;
       this.addLabel(gl);
       const gpsApo = a.gps.rows.find((r) => r.label === "Apogee AGL")?.gps;
       let gi = 0;
       for (let i = 0; i < a.gps.y.length; i++) if (a.gps.y[i] > a.gps.y[gi]) gi = i;
-      const ga = textSprite(`GPS apogee ${gpsApo?.toFixed(0)} ft`, "#ffffff");
+      const ga = textSprite(() => `GPS apogee ${show(gpsApo, "ft")}`, "#ffffff");
       ga.position.set(a.gps.x[gi], a.gps.y[gi], a.gps.z[gi]);
       ga.userData.small = true;
       ga.userData.offset = true;
@@ -474,6 +483,20 @@ export class Replay3D {
   private addLabel(s: THREE.Sprite) {
     this.labels.push(s);
     this.worldGroup.add(s);
+  }
+
+  /** redraw labels whose text depends on display units */
+  refreshUnitLabels() {
+    for (const s of this.labels) {
+      const fn = s.userData.textFn as (() => string) | undefined;
+      if (!fn) continue;
+      const { tex, aspect } = drawLabel(fn(), s.userData.color as string);
+      const mat = s.material as THREE.SpriteMaterial;
+      mat.map?.dispose();
+      mat.map = tex;
+      mat.needsUpdate = true;
+      s.userData.aspect = aspect;
+    }
   }
 
   setSatellite(on: boolean) {
@@ -559,7 +582,8 @@ export class Replay3D {
       let iA = 0;
       for (let i = 0; i < p.y.length; i++) if (p.y[i] > p.y[iA]) iA = i;
       const sameFrame = c.trace.compass === this.a.compass;
-      const label = textSprite(`${c.trace.kind === "sim" ? "Sim" : c.trace.name} apogee ${p.y[iA].toFixed(0)} ft${sameFrame ? "" : " (heading not aligned)"}`, c.color);
+      const apoFt = p.y[iA];
+      const label = textSprite(() => `${c.trace.kind === "sim" ? "Sim" : c.trace.name} apogee ${show(apoFt, "ft")}${sameFrame ? "" : " (heading not aligned)"}`, c.color);
       label.position.set(p.x[iA], p.y[iA], p.z[iA]);
       label.userData.small = true;
       label.userData.offset = true;
