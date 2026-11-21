@@ -104,3 +104,19 @@ describe("landing what-if", async () => {
     expect(lo.distance).toBeLessThan(hi.distance);
   });
 });
+
+import { railExit } from "../../src/railExit";
+describe("rail exit", async () => {
+  const { f, a } = await sample("SN0614");
+  it("SN0614 leaves a 10 ft rail fast, and later on a longer rail", () => {
+    const r10 = railExit(f, a, 10)!, r20 = railExit(f, a, 20)!;
+    expect(r10.v).toBeGreaterThan(40); expect(r10.v).toBeLessThan(150);
+    expect(r20.v).toBeGreaterThan(r10.v);
+    expect(r20.t).toBeGreaterThan(r10.t);
+  });
+  it("matches the inertial speed at that moment within 15%", () => {
+    const r = railExit(f, a, 10)!;
+    const i = f.lr!.t.findIndex((x) => x >= r.t);
+    expect(Math.abs(r.v - f.lr!.velUp[i]) / r.v).toBeLessThan(0.15);
+  });
+});

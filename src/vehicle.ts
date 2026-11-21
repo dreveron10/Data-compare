@@ -5,9 +5,10 @@ export interface Vehicle {
   propLb: number | null; // propellant mass
   diaIn: number; // body tube outer diameter
   ratedNs: number | null; // motor's rated total impulse
+  railFt: number; // distance the rocket travels before it leaves the rail
 }
 const KEY = "dc.vehicles";
-const blank = (): Vehicle => ({ burnoutLb: null, propLb: null, diaIn: 6, ratedNs: null });
+const blank = (): Vehicle => ({ burnoutLb: null, propLb: null, diaIn: 6, ratedNs: null, railFt: 10 });
 
 function all(): Record<string, Vehicle> {
   try {

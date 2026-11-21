@@ -20,6 +20,7 @@ import { aeroSeries } from "./aero";
 import { buildExport } from "./exportAll";
 import { diameterFor, diameterFromCdA } from "./chute";
 import { predictLanding } from "./predict";
+import { SL_MIN_RAIL_EXIT, railExit } from "./railExit";
 import { Recorder, pickMime } from "./record";
 import { applyTheme, axisColor, getTheme, gridColor, onThemeChange, setTheme } from "./theme";
 import { vMaxFor } from "./recovery";
@@ -631,6 +632,16 @@ function renderCoast(rebuildInputs = true) {
     series: [{}, { stroke: "#f5c26b", width: 0, points: { show: true, size: 3, fill: "#f5c26b", stroke: "#f5c26b" }, paths: () => null }],
   }, [order.map((i) => d.mach[i]), order.map((i) => d.cd[i])], host);
 }
+// ---------- rail exit ----------
+function railHtml(): string {
+  if (!A || !flight) return "";
+  const rail = getVehicle(vehicleKey).railFt;
+  const re = railExit(flight, A, rail);
+  if (!re) return `<div class="wide"><span class="k">Rail exit speed</span><span class="v">-</span><span class="k">Couldn't find first motion in the accelerometer.</span></div>`;
+  const ok = re.v >= SL_MIN_RAIL_EXIT;
+  return `<div class="wide"><span class="k">Rail exit speed (${show(rail, "ft", 1)} of rail travel)</span><span class="v ${ok ? "ok" : "bad"}">${show(re.v, "ft/s", 0)}</span><span class="k">${ok ? "Above" : "Below"} the ${show(SL_MIN_RAIL_EXIT, "ft/s")} Student Launch minimum. Left the rail ${(re.t - re.start).toFixed(2)} s after first motion. Set the rail travel in the Vehicle card.</span></div>`;
+}
+
 // ---------- motor (thrust from the accelerometer) ----------
 let motorPlot: uPlot | null = null;
 type MotorCfg = { propLb: number | null; ratedNs: number | null };
@@ -666,7 +677,7 @@ function renderMotor(rebuildInputs = true) {
     <div><span class="k">Total impulse</span><span class="v">${th.impulseNs.toFixed(0)} N·s</span>${vsRated ? `<span class="k">${vsRated}</span>` : ""}</div>
     <div><span class="k">Burn time</span><span class="v">${th.burnTime.toFixed(2)} s</span></div>
     <div><span class="k">Average thrust</span><span class="v">${f(th.avgN)}</span></div>
-    <div><span class="k">Peak thrust</span><span class="v">${f(th.peakN)}</span></div>`;
+    <div><span class="k">Peak thrust</span><span class="v">${f(th.peakN)}</span></div>${railHtml()}`;
   const k = getUnits() === "imperial" ? 1 : 4.448222;
   const thrustCmps = cmps.filter((c) => c.trace.thrust);
   const liftMine = A!.events.find((e) => e.key === "liftoff")?.t ?? 0;
@@ -735,8 +746,9 @@ function renderVehicle() {
     vIn("veh-prop").value = lb(v.propLb);
     vIn("veh-dia").value = conv(v.diaIn, "in")[0].toFixed(2);
     vIn("veh-rated").value = v.ratedNs === null ? "" : String(v.ratedNs);
+    vIn("veh-rail").value = conv(v.railFt, "ft")[0].toFixed(1);
   }
-  for (const [id, label] of [["veh-burnout", `Burnout mass (${cu("lb")})`], ["veh-prop", `Propellant (${cu("lb")})`], ["veh-dia", `Body diameter (${cu("in")})`]] as const)
+  for (const [id, label] of [["veh-burnout", `Burnout mass (${cu("lb")})`], ["veh-prop", `Propellant (${cu("lb")})`], ["veh-dia", `Body diameter (${cu("in")})`], ["veh-rail", `Rail travel (${cu("ft")})`]] as const)
     $(id).parentElement!.firstChild!.textContent = label;
   const sections = recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
   const notes: string[] = [];
@@ -750,7 +762,8 @@ function renderVehicle() {
 function vehicleInput() {
   const v = getVehicle(vehicleKey);
   const num = (id: string) => { const x = parseFloat(vIn(id).value); return Number.isFinite(x) && x >= 0 ? x : null; };
-  const b = num("veh-burnout"), pr = num("veh-prop"), d = num("veh-dia"), r = num("veh-rated");
+  const b = num("veh-burnout"), pr = num("veh-prop"), d = num("veh-dia"), r = num("veh-rated"), rl = num("veh-rail");
+  if (rl !== null && rl > 0) v.railFt = rl / conv(1, "ft")[0];
   v.burnoutLb = b !== null && b > 0 ? b / conv(1, "lb")[0] : null;
   v.propLb = pr !== null ? pr / conv(1, "lb")[0] : null;
   if (d !== null && d > 0) v.diaIn = d / conv(1, "in")[0];
@@ -760,7 +773,7 @@ function vehicleInput() {
   renderCoast();
   renderMotor();
 }
-for (const id of ["veh-burnout", "veh-prop", "veh-dia", "veh-rated"]) $(id).addEventListener("change", vehicleInput);
+for (const id of ["veh-burnout", "veh-prop", "veh-dia", "veh-rated", "veh-rail"]) $(id).addEventListener("change", vehicleInput);
 async function loadVehicleKey() {
   const e = currentEntryId ? await getEntry(currentEntryId) : undefined;
   vehicleLabel = e?.vehicle?.trim() ?? "";

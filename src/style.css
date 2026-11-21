@@ -598,3 +598,5 @@ table.chute td, table.chute th { font-size: 13px; white-space: nowrap; }
 [data-theme="light"] .toast, [data-theme="light"] .keys-pop { box-shadow: 0 14px 40px rgba(20, 33, 59, 0.2); }
 [data-theme="light"] .u-legend { color: var(--text); }
 .theme-btn { font-size: 14px; }
+.motor-stats .v.ok { color: var(--good); }
+.motor-stats .v.bad { color: var(--bad); }
