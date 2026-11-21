@@ -19,6 +19,7 @@
         </div>
       </div>
       <div class="top-actions">
+        <div class="seg" role="group" aria-label="Units"><button data-units="imperial">ft</button><button data-units="metric">m</button></div>
         <button class="btn" id="lib-open">Library</button>
         <button class="btn" id="save-open" hidden>Save flight</button>
         <button class="btn" id="report-open" hidden>Print report</button>
@@ -106,6 +107,7 @@
               <label>Max KE per section <input type="number" id="rec-ke" /> ft-lbf</label>
               <label>Max descent time <input type="number" id="rec-desc" /> s</label>
               <label>Max drift <input type="number" id="rec-drift" /> ft</label>
+              <span class="muted small">Masses and limits are entered in lb, ft and ft-lbf.</span>
             </div>
             <p class="muted small">Check these against your current handbook. Changes are kept with this flight when it is saved in the library.</p>
             <button class="btn small-btn" id="rec-default" type="button">Use for new flights too</button>

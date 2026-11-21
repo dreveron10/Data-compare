@@ -334,3 +334,8 @@ mark { background: rgba(255, 122, 26, 0.28); color: inherit; border-radius: 2px;
 .metrics.desc td:nth-child(n+2), .metrics.desc th:nth-child(n+2) { text-align: right; }
 #desc-chart { margin-top: 8px; }
 #desc-chart .u-legend { display: none; }
+
+/* units toggle */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { background: var(--panel-2); color: var(--muted); border: none; padding: 8px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+.seg button.active { background: var(--panel); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); font-weight: 600; }

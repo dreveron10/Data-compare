@@ -1,3 +1,4 @@
+import { show } from "./units";
 // Recovery check: landing kinetic energy per section, descent time, drift and apogee vs target.
 // Limits are editable because competition handbooks change year to year.
 
@@ -61,11 +62,11 @@ export function evaluate(c: RecoveryConfig, x: RecoveryInputs): RecoveryResult {
     const ke = v !== null ? keOf(s.massLb, v) : null;
     rows.push({
       label: s.name,
-      sub: `${s.massLb} lb, KE at landing`,
-      value: ke !== null ? `${ke.toFixed(1)} ft-lbf` : "-",
-      limit: `≤ ${c.keLimit}`,
+      sub: `${show(s.massLb, "lb", 1)}, KE at landing`,
+      value: show(ke, "ft-lbf", 1),
+      limit: `≤ ${show(c.keLimit, "ft-lbf")}`,
       verdict: ke === null ? "na" : ke <= c.keLimit ? "pass" : "fail",
-      note: `Lands under the limit below ${vMaxFor(s.massLb, c.keLimit).toFixed(1)} ft/s`,
+      note: `Lands under the limit below ${show(vMaxFor(s.massLb, c.keLimit), "ft/s", 1)}`,
     });
   }
   rows.push({
@@ -77,8 +78,8 @@ export function evaluate(c: RecoveryConfig, x: RecoveryInputs): RecoveryResult {
   });
   rows.push({
     label: "Drift from pad",
-    value: x.drift !== null ? `${x.drift.toFixed(0)} ft` : "needs GPS",
-    limit: `≤ ${c.driftLimit} ft`,
+    value: x.drift !== null ? show(x.drift, "ft") : "needs GPS",
+    limit: `≤ ${show(c.driftLimit, "ft")}`,
     verdict: x.drift === null ? "na" : x.drift <= c.driftLimit ? "pass" : "fail",
     note: "GPS landing position vs the pad",
   });
@@ -86,8 +87,8 @@ export function evaluate(c: RecoveryConfig, x: RecoveryInputs): RecoveryResult {
     const d = x.apogee !== null ? x.apogee - c.targetApogeeFt : null;
     rows.push({
       label: "Apogee vs target",
-      value: d !== null ? `${d >= 0 ? "+" : ""}${d.toFixed(0)} ft` : "-",
-      limit: `${c.targetApogeeFt} ft`,
+      value: d !== null ? `${d >= 0 ? "+" : ""}${show(d, "ft")}` : "-",
+      limit: show(c.targetApogeeFt, "ft"),
       verdict: "na",
       note: d !== null ? `${((Math.abs(d) / c.targetApogeeFt) * 100).toFixed(1)}% off the declared target` : undefined,
     });

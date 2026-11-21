@@ -5,6 +5,7 @@ import "uplot/dist/uPlot.min.css";
 import type { Analysis, FlightEvent } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
 import { sampleAt, type ActiveCompare } from "./compare";
+import { cu, cv } from "./units";
 
 /** resample a comparison series onto x (flight time), aligned at liftoff plus the comparison's offset */
 function onBase(x: ArrayLike<number>, lift: number, t: ArrayLike<number>, y: ArrayLike<number>) {
@@ -184,17 +185,17 @@ export class Charts {
       scales: { x: { time: false, min: a.tStart, max: a.tEnd }, y: { auto: true }, ...(d.y2Label ? { y2: { auto: true } } : {}) },
       axes: [
         { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: "Flight time (s)", labelSize: 22, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
-        { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: d.yLabel, labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
+        { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: cu(d.yLabel), labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
         // every chart reserves a right axis so the time axes line up across charts
         d.y2Label
-          ? { scale: "y2", side: 1, stroke: "#8a96b0", grid: { show: false }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: d.y2Label, labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" }
+          ? { scale: "y2", side: 1, stroke: "#8a96b0", grid: { show: false }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: cu(d.y2Label), labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" }
           : { scale: "y", side: 1, grid: { show: false }, ticks: { show: false }, values: () => [], size: 78 },
       ],
       series: [
         { label: "t", value: (_u, v) => (v == null ? "-" : `${v.toFixed(2)} s`) },
         ...d.series.map((s) => ({
           label: s.label, stroke: s.color, width: s.width ?? 1.5, dash: s.dash, points: { show: false }, scale: s.scale ?? "y",
-          value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(Math.abs(v) < 20 ? 2 : 0)} ${s.unit}`),
+          value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(Math.abs(v) < 20 ? 2 : 0)} ${cu(s.unit)}`),
         })),
       ],
       hooks: {
@@ -209,8 +210,8 @@ export class Charts {
       },
     };
     // uPlot treats null as a gap; NaN would break autoscaling
-    const clean = (a: ArrayLike<number>) => Array.from(a, (v) => (Number.isFinite(v) ? v : null));
-    const data = [Array.from(d.x), ...d.series.map((s) => clean(s.data))] as uPlot.AlignedData;
+    const clean = (a: ArrayLike<number>, k: number) => Array.from(a, (v) => (Number.isFinite(v) ? v * k : null));
+    const data = [Array.from(d.x), ...d.series.map((s) => clean(s.data, cv(1, s.unit)))] as uPlot.AlignedData;
     const u = new uPlot(opts, data, wrap);
     // click (without drag) to seek
     let downX = 0;
@@ -249,7 +250,7 @@ export class Charts {
   }
 
   private exportCsv(u: uPlot, d: ChartDef) {
-    const heads = ["Flight time (s)", ...d.series.map((s) => `${s.label} (${s.unit})`)];
+    const heads = ["Flight time (s)", ...d.series.map((s) => `${s.label} (${cu(s.unit)})`)];
     const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
     const lines = [heads.map(esc).join(",")];
     const x = u.data[0];

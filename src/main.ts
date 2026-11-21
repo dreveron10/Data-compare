@@ -5,6 +5,7 @@ import { Replay3D, type CameraMode } from "./replay3d";
 import { Charts } from "./charts";
 import { loadAndAnalyze } from "./background";
 import { findFindings } from "./findings";
+import { conv, cu, getUnits, onUnitsChange, setUnits, show } from "./units";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
@@ -223,7 +224,7 @@ function renderCompare() {
       const rel = Math.abs(b) > 1e-6 ? Math.abs(d / b) : 0;
       diff = `<td><span class="diff${rel > 0.05 ? " big" : ""}">${d >= 0 ? "+" : ""}${fmt(d, unit)}</span></td>`;
     }
-    return `<tr><td>${label}</td><td>${fmt(a, unit)}</td>${others.map((o) => `<td>${fmt(o, unit)}</td>`).join("")}${single ? diff || "<td></td>" : ""}<td class="unit">${unit}</td></tr>`;
+    return `<tr><td>${label}</td><td>${fmt(a, unit)}</td>${others.map((o) => `<td>${fmt(o, unit)}</td>`).join("")}${single ? diff || "<td></td>" : ""}<td class="unit">${cu(unit)}</td></tr>`;
   }).join("");
   const heads = cmps.map((c) => `<th><i class="sw" style="background:${c.color}"></i></th>`).join("");
   $("cmp-table").innerHTML = `<tr><th>Metric</th><th>This</th>${heads}${single ? "<th>Δ</th>" : ""}<th></th></tr>${rows}`;
@@ -298,7 +299,7 @@ function showFlightTitle() {
 function fmt(v: number | null | undefined, unit: string) {
   if (v === null || v === undefined || !Number.isFinite(v)) return "-";
   const d = unit === "g" || unit === "V" || unit === "rev" || unit === "s" ? (Math.abs(v) < 100 ? 2 : 1) : unit === "deg" ? 1 : 0;
-  return v.toFixed(d);
+  return conv(v, unit)[0].toFixed(d);
 }
 
 function renderMetrics() {
@@ -309,7 +310,7 @@ function renderMetrics() {
       const rel = Math.abs(m.device) > 1e-6 ? Math.abs(d / m.device) : 0;
       diff = `<span class="diff${rel > 0.05 ? " big" : ""}">${d >= 0 ? "+" : ""}${fmt(d, m.unit)}</span>`;
     }
-    return `<tr${m.note ? ` title="${escapeHtml(m.note)}"` : ""}><td>${escapeHtml(m.label)}</td><td>${fmt(m.site, m.unit)}</td><td>${fmt(m.device, m.unit)}</td><td>${diff}</td><td class="unit">${m.unit}</td></tr>`;
+    return `<tr${m.note ? ` title="${escapeHtml(m.note)}"` : ""}><td>${escapeHtml(m.label)}</td><td>${fmt(m.site, m.unit)}</td><td>${fmt(m.device, m.unit)}</td><td>${diff}</td><td class="unit">${cu(m.unit)}</td></tr>`;
   });
   $("metrics").innerHTML = `<tr><th>Metric</th><th>Site</th><th>Blue Raven</th><th>Δ</th><th></th></tr>${rows.join("")}`;
 }
@@ -322,11 +323,11 @@ function renderDescent() {
   const weight = recovery.sections.reduce((n, s) => n + (s.massLb > 0 ? s.massLb : 0), 0) || null;
   const phases = descentPhases(flight, A, weight);
   $("desc-sub").textContent = weight
-    ? `CdA uses ${weight.toFixed(1)} lb, the total of the recovery sections. Air density comes from the logged pressure and temperature.`
+    ? `CdA uses ${show(weight, "lb", 1)}, the total of the recovery sections. Air density comes from the logged pressure and temperature.`
     : "Enter section masses in the recovery check to estimate parachute CdA.";
   $("desc-table").innerHTML = phases.length
     ? `<tr><th>Phase</th><th>Rate</th><th>At sea level</th><th>CdA</th></tr>${phases
-        .map((p) => `<tr title="${p.altTop.toFixed(0)} to ${p.altBottom.toFixed(0)} ft, T+${p.t0.toFixed(1)} to ${p.t1.toFixed(1)} s"><td>${p.name}<small class="muted" style="display:block">${p.altTop.toFixed(0)} to ${p.altBottom.toFixed(0)} ft</small></td><td>${p.rate.toFixed(1)} ft/s</td><td>${p.seaLevelRate.toFixed(1)} ft/s</td><td>${p.cdA !== null ? p.cdA.toFixed(1) + " ft²" : "-"}</td></tr>`)
+        .map((p) => `<tr title="${p.altTop.toFixed(0)} to ${p.altBottom.toFixed(0)} ft, T+${p.t0.toFixed(1)} to ${p.t1.toFixed(1)} s"><td>${p.name}<small class="muted" style="display:block">${conv(p.altTop, "ft")[0].toFixed(0)} to ${show(p.altBottom, "ft")}</small></td><td>${show(p.rate, "ft/s", 1)}</td><td>${show(p.seaLevelRate, "ft/s", 1)}</td><td>${show(p.cdA, "ft²", 1)}</td></tr>`)
         .join("")}`
     : '<tr><td class="muted">No steady descent found.</td></tr>';
   const { x, y } = rateVsAltitude(flight, A);
@@ -342,10 +343,10 @@ function renderDescent() {
     scales: { x: { time: false } },
     axes: [
       { stroke: "#8d9bb8", label: "Altitude AGL (ft)", labelSize: 20, size: 34, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
-      { stroke: "#8d9bb8", label: "Descent rate (ft/s)", labelSize: 20, size: 44, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: "#8d9bb8", label: `Descent rate (${cu("ft/s")})`, labelSize: 20, size: 44, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
     ],
     series: [{}, { stroke: "#6cc4ff", width: 1.5, points: { show: false } }],
-  }, [x, y], host);
+  }, [x.map((v) => conv(v, "ft")[0]), y.map((v) => conv(v, "ft/s")[0])], host);
 }
 
 // ---------- findings ----------
@@ -380,7 +381,7 @@ function renderRecovery() {
   if (!A) return;
   const x = recoveryInputs();
   $("rec-sub").textContent = x.landingSpeed !== null
-    ? `Landing speed ${x.landingSpeed.toFixed(1)} ft/s, from the main descent fit.`
+    ? `Landing speed ${show(x.landingSpeed, "ft/s", 1)}, from the main descent fit.`
     : "No main descent found, so landing energy can't be computed.";
   const r = evaluate(recovery, x);
   $("rec-table").innerHTML = r.rows
@@ -420,7 +421,7 @@ function renderGps() {
   const panel = $("gps-panel");
   panel.hidden = !g;
   if (!g || !flight?.gps) return;
-  $("gps-sub").textContent = `${flight.gps.name}, aligned ${g.manual ? "manually" : "automatically"}. Heading fit ${(((g.yaw * 180) / Math.PI + 360) % 360).toFixed(0)}°, ascent mismatch ${g.ascentRms.toFixed(0)} ft RMS.`;
+  $("gps-sub").textContent = `${flight.gps.name}, aligned ${g.manual ? "manually" : "automatically"}. Heading fit ${(((g.yaw * 180) / Math.PI + 360) % 360).toFixed(0)}°, ascent mismatch ${show(g.ascentRms, "ft")} RMS.`;
   const rows = g.rows.map((r) => {
     let diff = "";
     if (r.br !== null && r.gps !== null && Number.isFinite(r.br) && Number.isFinite(r.gps)) {
@@ -428,13 +429,13 @@ function renderGps() {
       const rel = Math.abs(r.gps) > 1e-6 ? Math.abs(d / r.gps) : 0;
       diff = `<span class="diff${rel > 0.05 ? " big" : ""}">${d >= 0 ? "+" : ""}${fmt(d, r.unit)}</span>`;
     }
-    return `<tr${r.note ? ` title="${escapeHtml(r.note)}"` : ""}><td>${escapeHtml(r.label)}</td><td>${fmt(r.br, r.unit)}</td><td>${fmt(r.gps, r.unit)}</td><td>${diff}</td><td class="unit">${r.unit}</td></tr>`;
+    return `<tr${r.note ? ` title="${escapeHtml(r.note)}"` : ""}><td>${escapeHtml(r.label)}</td><td>${fmt(r.br, r.unit)}</td><td>${fmt(r.gps, r.unit)}</td><td>${diff}</td><td class="unit">${cu(r.unit)}</td></tr>`;
   });
   $("compare").className = "metrics cmp";
   $("compare").innerHTML = `<tr><th>Metric</th><th>Blue Raven</th><th>GPS</th><th>Δ</th><th></th></tr>${rows.join("")}`;
   const L = g.landing;
   const ll = `${L.lat.toFixed(5)}, ${L.lon.toFixed(5)}`;
-  $("gps-landing").innerHTML = `Landing: <b>${L.distance.toFixed(0)} ft</b> from the pad, bearing <b>${L.bearing.toFixed(0)}°</b><br/>` +
+  $("gps-landing").innerHTML = `Landing: <b>${show(L.distance, "ft")}</b> from the pad, bearing <b>${L.bearing.toFixed(0)}°</b><br/>` +
     `<a href="https://www.google.com/maps?q=${encodeURIComponent(ll)}" target="_blank" rel="noopener">${ll} ↗</a>`;
   $<HTMLInputElement>("gps-offset").value = g.offset.toFixed(2);
 }
@@ -457,22 +458,22 @@ function renderEvents() {
   $("events").innerHTML = A!.events
     .map((e, i) => {
       const alt = p.y[indexAt(p.t, e.t)];
-      return `<li data-t="${e.t}"><span class="num">${i < 9 ? i + 1 : ""}</span><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${alt.toFixed(0)} ft</span><span class="t">T+${e.t.toFixed(2)} s</span></li>`;
+      return `<li data-t="${e.t}"><span class="num">${i < 9 ? i + 1 : ""}</span><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${show(alt, "ft")}</span><span class="t">T+${e.t.toFixed(2)} s</span></li>`;
     })
     .join("");
 }
 
 const COND_MAP: Record<string, { flag?: string; state?: string; text: (v: Record<string, number>) => string }> = {
-  "Alt_above_pad_<_AGL1": { flag: "LT_AGL1", text: (v) => `AGL < ${v.AGL1} ft` },
-  "Alt_above_pad_>_AGL2": { flag: "GT_AGL2", text: (v) => `AGL > ${v.AGL2} ft` },
+  "Alt_above_pad_<_AGL1": { flag: "LT_AGL1", text: (v) => `AGL < ${show(v.AGL1, "ft")}` },
+  "Alt_above_pad_>_AGL2": { flag: "GT_AGL2", text: (v) => `AGL > ${show(v.AGL2, "ft")}` },
   "Flight_angle_<_FANG1": { flag: "LT_FANG1", text: (v) => `Tilt < ${v.FANG1}°` },
   "Flight_angle_>_FANG2": { flag: "GT_FANG2", text: (v) => `Tilt > ${v.FANG2}°` },
   "Future_Angle_>_FUTANG": { flag: "GT_FUTANG", text: (v) => `Future angle > ${v.FUTANG}°` },
   "Time_<_TVAL1": { flag: "LT_TVAL1", text: (v) => `Time < ${v.TVAL1} s` },
   "Time_>_TVAL2": { flag: "GT_TVAL2", text: (v) => `Time > ${v.TVAL2} s` },
-  "Total_Velocity_<_VEL1": { flag: "LT_VEL1", text: (v) => `Velocity < ${v.VEL1} ft/s` },
-  "Total_Velocity_>_VEL2": { flag: "GT_VEL2", text: (v) => `Velocity > ${v.VEL2} ft/s` },
-  "Baro_velocity_<_BVEL": { flag: "LT_BVEL1", text: (v) => `Baro vel < ${v.BVEL1} ft/s` },
+  "Total_Velocity_<_VEL1": { flag: "LT_VEL1", text: (v) => `Velocity < ${show(v.VEL1, "ft/s")}` },
+  "Total_Velocity_>_VEL2": { flag: "GT_VEL2", text: (v) => `Velocity > ${show(v.VEL2, "ft/s")}` },
+  "Baro_velocity_<_BVEL": { flag: "LT_BVEL1", text: (v) => `Baro vel < ${show(v.BVEL1, "ft/s")}` },
   "Burnouts_>_BURNCOUNT": { flag: "GT_BURN", text: (v) => `Burnouts ≥ ${v.BRNCNT}` },
   "Channel_is_armed": { flag: "Armed", text: () => "Armed" },
   Liftoff: { state: "Liftoff", text: () => "Liftoff" },
@@ -561,7 +562,12 @@ function updateHud(time: number) {
     rr = A!.rollRate[k].toFixed(0);
   }
   const descent = time > A!.path.t[A!.path.apogeeIdx];
-  const v = (n: string, unit: string) => `${n}<small>${unit}</small>`;
+  const v = (n: string, unit: string) => {
+    const x = parseFloat(n);
+    if (!Number.isFinite(x)) return `${n}<small>${cu(unit)}</small>`;
+    const [y, u] = conv(x, unit);
+    return `${y.toFixed(n.includes(".") ? n.split(".")[1].length : 0)}<small>${u}</small>`;
+  };
   $("hud").innerHTML = `
     <div class="phase">${phaseAt(time)}</div>
     <div><div class="k">Altitude AGL</div><div class="v">${v(alt.toFixed(0), "ft")}</div></div>
@@ -579,7 +585,7 @@ function gpsHud(time: number) {
   if (!g || !d) return "";
   const k = indexAt(g.t, time);
   return `
-    <div><div class="k">Drift from pad</div><div class="v">${d.distance[k].toFixed(0)}<small>ft</small></div></div>
+    <div><div class="k">Drift from pad</div><div class="v">${conv(d.distance[k], "ft")[0].toFixed(0)}<small>${cu("ft")}</small></div></div>
     <div class="gps-sats"><div class="k">GPS satellites</div><div class="v">${d.sats[k]}</div></div>`;
 }
 
@@ -776,6 +782,33 @@ $("rec-default").addEventListener("click", () => {
   setTimeout(() => ($("rec-default").textContent = "Use for new flights too"), 1800);
 });
 
+// ---------- units ----------
+function renderUnitsToggle() {
+  document.querySelectorAll<HTMLButtonElement>("[data-units]").forEach((b) => {
+    const on = b.dataset.units === getUnits();
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+}
+document.querySelectorAll<HTMLButtonElement>("[data-units]").forEach((b) =>
+  b.addEventListener("click", () => setUnits(b.dataset.units as "imperial" | "metric")),
+);
+onUnitsChange(() => {
+  renderUnitsToggle();
+  if (!A || !flight) return;
+  charts.setFlight(A, flight, cmps);
+  renderMetrics();
+  renderRecovery();
+  renderDescent();
+  renderGps();
+  renderEvents();
+  renderSettings();
+  renderCompare();
+  updateHud(t);
+  charts.setPlayhead(t);
+});
+renderUnitsToggle();
+
 // ---------- printable report ----------
 async function buildReport() {
   if (!A || !flight) return;
@@ -785,7 +818,7 @@ async function buildReport() {
   const dateStr = fd ? new Date(fd + "T12:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "";
   const e = escapeHtml;
   const metricRows = A.metrics
-    .map((m) => `<tr><td>${e(m.label)}</td><td class="n">${fmt(m.site, m.unit)}</td><td class="n">${fmt(m.device, m.unit)}</td><td>${e(m.unit)}</td></tr>`)
+    .map((m) => `<tr><td>${e(m.label)}</td><td class="n">${fmt(m.site, m.unit)}</td><td class="n">${fmt(m.device, m.unit)}</td><td>${e(cu(m.unit))}</td></tr>`)
     .join("");
   const rec = evaluate(recovery, recoveryInputs());
   const recRows = rec.rows
@@ -793,18 +826,18 @@ async function buildReport() {
     .join("");
   const p = A.path;
   const evRows = A.events
-    .map((ev) => `<tr><td>${e(ev.label)}</td><td class="n">T+${ev.t.toFixed(2)} s</td><td class="n">${p.y[indexAt(p.t, ev.t)].toFixed(0)} ft</td></tr>`)
+    .map((ev) => `<tr><td>${e(ev.label)}</td><td class="n">T+${ev.t.toFixed(2)} s</td><td class="n">${show(p.y[indexAt(p.t, ev.t)], "ft")}</td></tr>`)
     .join("");
   const g = A.gps;
   const gpsBlock = g
     ? `<section><h2>Blue Raven vs GPS</h2><table><tr><th>Metric</th><th class="n">Blue Raven</th><th class="n">GPS</th><th></th></tr>${g.rows
-        .map((r) => `<tr><td>${e(r.label)}</td><td class="n">${fmt(r.br, r.unit)}</td><td class="n">${fmt(r.gps, r.unit)}</td><td>${e(r.unit)}</td></tr>`)
-        .join("")}</table><p>Landing ${g.landing.distance.toFixed(0)} ft from the pad at ${g.landing.bearing.toFixed(0)}°, ${g.landing.lat.toFixed(5)}, ${g.landing.lon.toFixed(5)}.</p></section>`
+        .map((r) => `<tr><td>${e(r.label)}</td><td class="n">${fmt(r.br, r.unit)}</td><td class="n">${fmt(r.gps, r.unit)}</td><td>${e(cu(r.unit))}</td></tr>`)
+        .join("")}</table><p>Landing ${show(g.landing.distance, "ft")} from the pad at ${g.landing.bearing.toFixed(0)}°, ${g.landing.lat.toFixed(5)}, ${g.landing.lon.toFixed(5)}.</p></section>`
     : "";
   const mine = keyNumbersOf(A);
   const cmpBlock = cmps.length
     ? `<section><h2>Comparison</h2><table><tr><th>Metric</th><th class="n">This flight</th>${cmps.map((c) => `<th class="n">${e(c.trace.kind === "sim" ? "Sim: " + c.trace.name : c.trace.name)}</th>`).join("")}<th></th></tr>${KEY_ROWS.map(
-        ({ k, label, unit }) => `<tr><td>${label}</td><td class="n">${fmt(mine[k], unit)}</td>${cmps.map((c) => `<td class="n">${fmt(c.trace.key[k], unit)}</td>`).join("")}<td>${unit}</td></tr>`,
+        ({ k, label, unit }) => `<tr><td>${label}</td><td class="n">${fmt(mine[k], unit)}</td>${cmps.map((c) => `<td class="n">${fmt(c.trace.key[k], unit)}</td>`).join("")}<td>${cu(unit)}</td></tr>`,
       ).join("")}</table></section>`
     : "";
   const shot3d = replay.snapshot();
@@ -972,9 +1005,9 @@ async function renderLibrary() {
         <td>${escapeHtml(e.date || "-")}</td>
         <td>${hl(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}
           <div class="chips">${e.vehicle ? `<span class="chipline">${hl(e.vehicle)}</span>` : ""}${e.motor ? `<span class="chipline">${hl(e.motor)}</span>` : ""}${(e.tags ?? []).map((tg) => `<span class="chipline tagc">${hl(tg)}</span>`).join("")}</div></td>
-        <td class="num">${num(e.stats.apogee)} ft</td>
+        <td class="num">${show(e.stats.apogee, "ft")}</td>
         <td class="num">${num(e.stats.flightTime, 1)} s</td>
-        <td class="num">${e.stats.drift != null ? num(e.stats.drift) + " ft" : "-"}</td>
+        <td class="num">${show(e.stats.drift, "ft")}</td>
         <td class="notes">${hl(e.notes)}</td>
         <td class="acts">
           ${e.kind === "flight" ? `<button class="btn small-btn" data-act="open" data-id="${e.id}">Open</button>` : ""}
