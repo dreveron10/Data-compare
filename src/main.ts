@@ -41,6 +41,7 @@ import { buildKml } from "./kml";
 import { toCsv } from "./csv";
 import { deployStrip } from "./deployStrip";
 import { settingsDiff } from "./settingsDiff";
+import { altAgree } from "./altAgree";
 import { statChanges } from "./libraryStats";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
@@ -1191,6 +1192,34 @@ function renderGps() {
       <div class="muted small">Pad ${gp.padLat.toFixed(6)}, ${gp.padLon.toFixed(6)}. Landing is the GPS fix at touchdown.</div>
     </div>`;
   $<HTMLInputElement>("gps-offset").value = g.offset.toFixed(2);
+  renderAltAgree();
+}
+
+// ---------- GPS against baro altitude over the flight ----------
+let altPlot: uPlot | undefined;
+function renderAltAgree() {
+  const g = A?.gps, lr = flight?.lr;
+  const ev = (k: string) => A?.events.find((e) => e.key === k)?.t;
+  const r = g && lr ? altAgree(lr.t, A!.altSmooth, g.altOnLR, ev("liftoff") ?? 0, ev("apogee") ?? g.apogeeT, ev("landing") ?? A!.tEnd) : null;
+  $("gps-alt").hidden = !r;
+  altPlot?.destroy(); altPlot = undefined;
+  if (!r) return;
+  const sgn = (v: number | null) => (v === null ? "-" : `${v >= 0 ? "+" : ""}${show(v, "ft")}`);
+  $("gps-alt-sub").textContent = `Median ${sgn(r.median)} (climbing ${sgn(r.ascent)}, descending ${sgn(r.descent)}), largest ${show(r.maxAbs, "ft")}. A steady offset is the GPS's own altitude error; a gap that shows only while climbing comes from the fast vertical motion (GPS filtering, the clock alignment or the baro port), not a lasting height error.`;
+  const host = $("gps-alt-chart");
+  host.innerHTML = "";
+  altPlot = new uPlot({
+    width: Math.max(220, host.clientWidth || 320),
+    height: 150,
+    legend: { show: false },
+    cursor: { y: false },
+    scales: { x: { time: false } },
+    axes: [
+      { stroke: axisColor(), label: "Flight time (s)", labelSize: 20, size: 34, grid: { stroke: gridColor(), width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: axisColor(), label: `GPS - baro (${cu("ft")})`, labelSize: 20, size: 44, grid: { stroke: gridColor(), width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+    ],
+    series: [{}, { stroke: "#7bd88f", width: 1.5, points: { show: false } }],
+  }, [Array.from(r.t), Array.from(r.diff, (v) => conv(v, "ft")[0])], host);
 }
 
 $("gps-landing").addEventListener("click", async (e) => {
