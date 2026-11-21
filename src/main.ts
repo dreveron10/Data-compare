@@ -22,6 +22,7 @@ import { buildExport } from "./exportAll";
 import { diameterFor, diameterFromCdA } from "./chute";
 import { predictLanding } from "./predict";
 import { SL_MIN_RAIL_EXIT, railExit } from "./railExit";
+import { MATERIALS, flutterMargin, type Fin } from "./flutter";
 import { Recorder, pickMime } from "./record";
 import { applyTheme, axisColor, getTheme, gridColor, onThemeChange, setTheme } from "./theme";
 import { vMaxFor } from "./recovery";
@@ -463,6 +464,7 @@ function renderDescent() {
   renderChute(phases, weight);
   renderCoast();
   renderMotor();
+  renderFlutter();
   const { x, y } = rateVsAltitude(flight, A);
   descPlot?.destroy();
   const host = $("desc-chart");
@@ -633,6 +635,44 @@ function renderCoast(rebuildInputs = true) {
     series: [{}, { stroke: "#f5c26b", width: 0, points: { show: true, size: 3, fill: "#f5c26b", stroke: "#f5c26b" }, paths: () => null }],
   }, [order.map((i) => d.mach[i]), order.map((i) => d.cd[i])], host);
 }
+// ---------- fin flutter ----------
+const FIN_IDS = ["fl-root", "fl-tip", "fl-span", "fl-thick", "fl-g"] as const;
+$("fl-mat").innerHTML = MATERIALS.map((m) => `<option value="${m.gPsi}">${escapeHtml(m.name)}</option>`).join("") + '<option value="custom">Other (enter G)</option>';
+function renderFlutter(rebuildInputs = true) {
+  $("flutter-panel").hidden = !A;
+  if (!A || !flight) return;
+  const fin = getVehicle(vehicleKey).fin;
+  if (rebuildInputs) {
+    const vals = fin ? [fin.rootIn, fin.tipIn, fin.spanIn, fin.thickIn, fin.gPsi] : [null, null, null, null, MATERIALS[0].gPsi];
+    FIN_IDS.forEach((id, i) => { $<HTMLInputElement>(id).value = vals[i] === null ? "" : String(vals[i]); });
+    const g = fin?.gPsi ?? MATERIALS[0].gPsi;
+    $<HTMLSelectElement>("fl-mat").value = MATERIALS.some((m) => m.gPsi === g) ? String(g) : "custom";
+  }
+  if (!fin) {
+    $("flutter-sub").textContent = "Enter one fin's root chord, tip chord, span (body tube to tip) and thickness to compare its flutter speed with how fast this flight went.";
+    $("flutter-stats").innerHTML = "";
+    return;
+  }
+  const r = flutterMargin(flight, A, fin);
+  $("flutter-sub").textContent = "Flutter speed from the simplified NACA TN 4197 method (Peak of Flight #291), using the logged pressure and temperature at each point of the climb. A common rule of thumb is a margin of at least 1.5×. It assumes a solid, well-bonded fin of one material.";
+  if (!r) { $("flutter-stats").innerHTML = '<span class="muted small">No climb above 50 ft/s found.</span>'; return; }
+  const ok = r.minRatio >= 1.5;
+  $("flutter-stats").innerHTML = `
+    <div class="wide"><span class="k">Smallest margin</span><span class="v ${ok ? "ok" : "bad"}">${r.minRatio.toFixed(2)}×</span><span class="k">flutter speed ${show(r.vfAt, "ft/s")} vs ${show(r.vAt, "ft/s")} flown, at T+${r.tAt.toFixed(1)} s and ${show(r.altAt, "ft")}</span></div>
+    <div><span class="k">Max speed flown</span><span class="v">${show(r.maxV, "ft/s")}</span></div>`;
+}
+function flutterInput(e: Event) {
+  const num = (id: string) => { const x = parseFloat($<HTMLInputElement>(id).value); return Number.isFinite(x) && x > 0 ? x : null; };
+  const sel = $<HTMLSelectElement>("fl-mat");
+  if (e.target === sel && sel.value !== "custom") $<HTMLInputElement>("fl-g").value = sel.value;
+  const [root, tip, span, thick, g] = FIN_IDS.map(num);
+  const v = getVehicle(vehicleKey);
+  v.fin = root && span && thick && g ? { rootIn: root, tipIn: tip ?? 0, spanIn: span, thickIn: thick, gPsi: g } : undefined;
+  setVehicle(vehicleKey, v);
+  renderFlutter(false);
+}
+for (const id of [...FIN_IDS, "fl-mat"]) $(id).addEventListener("change", flutterInput);
+
 // ---------- rail exit ----------
 function liftoffHtml(th: { t: number[]; thrustLbf: number[] }, liftoffLb: number): string {
   // thrust-to-weight over the first 0.3 s of motion, and how long thrust took to come up

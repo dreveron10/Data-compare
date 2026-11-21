@@ -49,3 +49,17 @@ describe("chute sizing", () => {
     expect(diameterFromCdA(cdA, cd)).toBeCloseTo(60, 6);
   });
 });
+
+import { flutterSpeed } from "../../src/flutter";
+describe("fin flutter", () => {
+  const fin = { rootIn: 8, tipIn: 3, spanIn: 5, thickIn: 0.125, gPsi: 425000 };
+  it("reference fin at sea level", () => {
+    expect(flutterSpeed(fin, 14.696, 518.67)).toBeCloseTo(761, -1);
+  });
+  it("thicker, stiffer and higher all raise the flutter speed", () => {
+    const base = flutterSpeed(fin, 14.696, 518.67);
+    expect(flutterSpeed({ ...fin, thickIn: 0.1875 }, 14.696, 518.67)).toBeGreaterThan(base);
+    expect(flutterSpeed({ ...fin, gPsi: 3_800_000 }, 14.696, 518.67)).toBeGreaterThan(base);
+    expect(flutterSpeed(fin, 12, 500)).toBeGreaterThan(base * 0.98);
+  });
+});

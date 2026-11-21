@@ -216,6 +216,19 @@
           <div class="coast-cd" id="coast-cd"></div>
           <div id="coast-chart"></div>
         </div>
+        <div class="panel" id="flutter-panel" hidden>
+          <h2>Fin flutter</h2>
+          <div class="muted small" id="flutter-sub"></div>
+          <div class="coast-in flutter-in">
+            <label class="fld sm">Root chord (in)<input id="fl-root" type="number" min="0" step="0.1" inputmode="decimal" /></label>
+            <label class="fld sm">Tip chord (in)<input id="fl-tip" type="number" min="0" step="0.1" inputmode="decimal" /></label>
+            <label class="fld sm">Semi-span (in)<input id="fl-span" type="number" min="0" step="0.1" inputmode="decimal" /></label>
+            <label class="fld sm">Thickness (in)<input id="fl-thick" type="number" min="0" step="0.01" inputmode="decimal" /></label>
+            <label class="fld sm fl-wide">Material<select id="fl-mat"></select></label>
+            <label class="fld sm">Shear modulus G (psi)<input id="fl-g" type="number" min="0" step="1000" inputmode="decimal" /></label>
+          </div>
+          <div class="motor-stats" id="flutter-stats"></div>
+        </div>
         <div class="panel" id="cmp-panel" hidden>
           <h2>Compare</h2>
           <div class="muted small" id="cmp-sub">Overlay an OpenRocket simulation export or another Blue Raven flight. Both are aligned at liftoff.</div>

@@ -6,6 +6,7 @@ export interface Vehicle {
   diaIn: number; // body tube outer diameter
   ratedNs: number | null; // motor's rated total impulse
   railFt: number; // distance the rocket travels before it leaves the rail
+  fin?: { rootIn: number; tipIn: number; spanIn: number; thickIn: number; gPsi: number };
 }
 const KEY = "dc.vehicles";
 const blank = (): Vehicle => ({ burnoutLb: null, propLb: null, diaIn: 6, ratedNs: null, railFt: 10 });
