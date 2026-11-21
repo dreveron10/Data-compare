@@ -214,7 +214,7 @@ export class Charts {
           : { scale: "y", side: 1, grid: { show: false }, ticks: { show: false }, values: () => [], size: 78 },
       ],
       series: [
-        { label: "t", value: (_u, v) => (v == null ? "-" : `${v.toFixed(2)} s`) },
+        { label: "t", value: (_u, v) => (v == null ? "-" : `${v.toFixed(2)} s${self.eventNear(v)}`) },
         ...d.series.map((s) => ({
           label: s.label, stroke: ink(s.color), width: s.width ?? 1.5, dash: s.dash, points: { show: false }, scale: s.scale ?? "y",
           value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(Math.abs(v) < 20 ? 2 : 0)} ${cu(s.unit)}`),
@@ -330,6 +330,19 @@ export class Charts {
     download(`${this.flightName}-${slug(d.title)}.csv`, new Blob([lines.join("\n")], { type: "text/csv" }));
   }
 
+  /** ", Apogee" when the cursor time is within 0.3 s of a flight event (closest one), else "" */
+  eventNear(t: number): string {
+    let best: FlightEvent | null = null, bd = 0.3;
+    for (const e of this.events) {
+      if (e.key === "apogee_det") continue;
+      const d = Math.abs(e.t - t);
+      if (d <= bd) { bd = d; best = e; }
+    }
+    if (!best) return "";
+    // events logged at the same moment (Main and a backup on one fire) are named together
+    const same = this.events.filter((e) => e.key !== "apogee_det" && Math.abs(e.t - best!.t) < 0.02).map((e) => e.label);
+    return `, ${same.join(" + ")}`;
+  }
   /** chart image with title and legend, no playhead (for PNG export and the report) */
   private async compose(u: uPlot, d: ChartDef): Promise<HTMLCanvasElement> {
     const src = u.ctx.canvas; // the playhead is not on the canvas, so the image is clean
