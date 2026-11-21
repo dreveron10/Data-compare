@@ -772,6 +772,7 @@ function vehicleInput() {
   renderVehicle();
   renderCoast();
   renderMotor();
+  renderSL();
 }
 for (const id of ["veh-burnout", "veh-prop", "veh-dia", "veh-rated", "veh-rail"]) $(id).addEventListener("change", vehicleInput);
 async function loadVehicleKey() {
@@ -811,8 +812,34 @@ function recoveryInputs() {
   };
 }
 
+// ---------- Student Launch checks: the flight-data requirements in one place ----------
+function renderSL() {
+  $("sl-panel").hidden = !A;
+  if (!A || !flight) return;
+  type Row = { label: string; value: string; limit: string; verdict: "pass" | "fail" | "na"; note?: string };
+  const rows: Row[] = [];
+  const re = railExit(flight, A, getVehicle(vehicleKey).railFt);
+  rows.push({
+    label: "Rail exit speed", value: re ? show(re.v, "ft/s") : "-", limit: `≥ ${show(SL_MIN_RAIL_EXIT, "ft/s")}`,
+    verdict: re ? (re.v >= SL_MIN_RAIL_EXIT ? "pass" : "fail") : "na", note: `${show(getVehicle(vehicleKey).railFt, "ft", 1)} of rail travel (Vehicle card)`,
+  });
+  const ae = aeroSeries(flight, A);
+  rows.push({ label: "Stays subsonic", value: ae ? `Mach ${ae.maxMach.toFixed(2)}` : "-", limit: "< Mach 1", verdict: ae ? (ae.maxMach < 1 ? "pass" : "fail") : "na" });
+  const k = keyNumbersOf(A);
+  rows.push({
+    label: "Apogee in the 4,000 to 6,000 ft band", value: show(k.apogee, "ft"), limit: "4000 to 6000 ft",
+    verdict: k.apogee === null ? "na" : k.apogee >= 4000 && k.apogee <= 6000 ? "pass" : "fail",
+  });
+  const rec = evaluate(recovery, recoveryInputs());
+  for (const r of rec.rows) rows.push({ label: r.label === "Drift from pad" ? "Drift from pad" : r.label, value: r.value, limit: r.limit, verdict: r.verdict, note: r.sub ?? r.note });
+  const fails = rows.filter((r) => r.verdict === "fail").length, passes = rows.filter((r) => r.verdict === "pass").length;
+  $("sl-sub").textContent = `${passes} pass, ${fails} over the limit. Limits are from recent Student Launch handbooks; confirm them against this year's. Section masses, limits and the declared target are set in the Recovery check.`;
+  $("sl-list").innerHTML = rows.map((r) => `<li class="${r.verdict}"><span class="mark" aria-hidden="true">${r.verdict === "pass" ? "✓" : r.verdict === "fail" ? "✕" : "–"}</span><span class="lbl">${escapeHtml(r.label)}${r.note ? `<small>${escapeHtml(r.note)}</small>` : ""}</span><span class="val">${escapeHtml(r.value)}</span><span class="lim">${escapeHtml(r.limit)}</span><span class="sr-only">${r.verdict === "pass" ? "pass" : r.verdict === "fail" ? "over the limit" : "not checked"}</span></li>`).join("");
+}
+
 function renderRecovery() {
   $("rec-panel").hidden = !A;
+  renderSL();
   if (!A) return;
   const x = recoveryInputs();
   $("rec-sub").textContent = x.landingSpeed !== null
@@ -834,6 +861,7 @@ function renderRecovery() {
 
 async function recoveryChanged() {
   renderRecoveryTableOnly();
+  renderSL();
   renderDescent();
   renderVehicle();
   if (currentEntryId) {
