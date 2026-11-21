@@ -425,7 +425,7 @@ table.wind .bar { position: absolute; left: 0; bottom: -3px; height: 3px; border
 .marks li:hover { outline: 1px solid var(--line); }
 .marks li.near { outline: 1px solid #f7d154; }
 .marks .mt { font-family: var(--num); color: #f7d154; font-weight: 600; }
-.marks .mx { overflow-wrap: anywhere; }
+.marks .mx { overflow-wrap: break-word; }
 .marks .del { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
 .marks .del:hover { color: var(--signal); }
 .marks .empty-note { cursor: default; background: none; color: var(--muted); padding: 2px 0; display: block; }
@@ -682,3 +682,7 @@ button.chipline:hover { border-color: var(--line); color: var(--ink, inherit); }
 .deploy-strip .ds-bar { stroke: var(--muted); stroke-width: 2; opacity: 0.5; }
 .deploy-strip .ds-apo { stroke: var(--text); stroke-width: 2; }
 .tag.ref-tag { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.sdiff-t { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+.sdiff-t th { text-align: left; color: var(--muted); font-weight: 500; padding: 3px 4px; }
+.sdiff-t td { text-align: left; vertical-align: top; padding: 4px; border-top: 1px solid var(--line); overflow-wrap: break-word; }
+.sdiff-t td:first-child { font-weight: 600; white-space: nowrap; }

@@ -40,6 +40,7 @@ import { redundancy, sameFlight } from "./redundancy";
 import { buildKml } from "./kml";
 import { toCsv } from "./csv";
 import { deployStrip } from "./deployStrip";
+import { settingsDiff } from "./settingsDiff";
 import { statChanges } from "./libraryStats";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
@@ -330,6 +331,17 @@ function isSameRocket(c: ActiveCompare): boolean {
   return c.sameRocket ?? sameFlight(flight, A, c.src.flight, c.src.analysis);
 }
 /** two Blue Ravens that flew in the same rocket: an agreement table instead of a flight-to-flight comparison */
+/** where two units' deploy settings differ, as table rows (empty string when both match or a workbook is missing) */
+function settingsDiffHtml(other: BlueRavenFlight, e: (x: string) => string, forPrint = false): string {
+  const a = flight?.settings, b = other.settings;
+  if (!a || !b) return forPrint ? "" : '<p class="muted small">Load both units\' deploy settings workbooks to compare their programming.</p>';
+  const d = settingsDiff(a, b);
+  const head = forPrint ? "<h3 style=\"margin:10px 0 4px;font-size:11pt\">Deploy settings differences</h3>" : '<h4 class="sub-h">Deploy settings differences</h4>';
+  if (!d.length) return `${head}<p class="${forPrint ? "" : "muted small"}">Both units are programmed the same.</p>`;
+  return `${head}<table class="${forPrint ? "" : "sdiff-t"}"><tr><th>Channel</th><th></th><th>This unit</th><th>Other unit</th></tr>${d
+    .map((r) => `<tr><td>${r.channel}</td><td>${e(r.item)}</td><td>${e(r.a)}</td><td>${e(r.b)}</td></tr>`).join("")}</table>
+    <p class="${forPrint ? "" : "muted small"}" ${forPrint ? 'style="color:#6b7891;font-size:9pt"' : ""}>Differences can be on purpose (staggered backups) or a programming slip. Check each against the plan.</p>`;
+}
 function renderRedundancy() {
   const pairs = cmps.filter(isSameRocket);
   $("cmp-redund").innerHTML = pairs.map((c) => {
@@ -339,6 +351,7 @@ function renderRedundancy() {
       <table class="metrics redund-t"><tr><th></th><th>This unit</th><th>Other unit</th><th>Difference</th></tr>${r.rows
         .map((x) => `<tr class="${x.flag ? "flag" : ""}"><td>${escapeHtml(x.label)}</td><td>${escapeHtml(x.a)}</td><td>${escapeHtml(x.b)}</td><td>${escapeHtml(x.diff)}${x.flag ? '<span class="sr-only"> (disagrees)</span>' : ""}</td></tr>`).join("")}</table>
       <p class="muted small">${c.sameRocket === undefined ? "Matched on the logger clocks (same date, liftoff within 2 minutes)." : "Marked as the same rocket by hand."} Baro offset is the median altitude difference from liftoff to landing, skipping 1.5 s around each pyro fire. A steady offset is usually pad altitude or port size; a spread that grows during descent points at a leaky bay or blocked port. Flagged: apogee off by more than 2% (${show(30, "ft")} minimum), fire times more than 0.5 s apart or a channel firing on one unit only.</p>
+      ${settingsDiffHtml(c.src!.flight, escapeHtml)}
     </details>`;
   }).join("");
 }
@@ -1840,7 +1853,7 @@ async function buildReport() {
     const r = redundancy(flight!, A!, c.src!.flight, c.src!.analysis);
     return `<section><h2>Altimeter agreement: ${e(c.trace.name)}</h2><table><tr><th></th><th class="n">This unit</th><th class="n">Other unit</th><th class="n">Difference</th></tr>${r.rows
       .map((x) => `<tr><td>${e(x.label)}</td><td class="n">${e(x.a)}</td><td class="n">${e(x.b)}</td><td class="n ${x.flag ? "fail" : ""}">${e(x.diff)}${x.flag ? " (check)" : ""}</td></tr>`).join("")}</table>
-      <p style="color:#6b7891;font-size:9pt">Same flight by the logger clocks. Baro offset is the median altitude difference, liftoff to landing, skipping 1.5 s around each pyro fire.</p></section>`;
+      <p style="color:#6b7891;font-size:9pt">Same flight by the logger clocks. Baro offset is the median altitude difference, liftoff to landing, skipping 1.5 s around each pyro fire.</p>${settingsDiffHtml(c.src!.flight, e, true)}</section>`;
   }).join("");
   const notesBlock = marks.length
     ? `<section><h2>Notes on the timeline</h2><table><tr><th style="width:90px">Time</th><th>Note</th></tr>${marks
