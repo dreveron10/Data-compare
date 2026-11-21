@@ -1049,9 +1049,28 @@ async function buildReport() {
         .map((r) => `<tr><td>${e(r.label)}</td><td class="n">${fmt(r.br, r.unit)}</td><td class="n">${fmt(r.gps, r.unit)}</td><td>${e(cu(r.unit))}</td></tr>`)
         .join("")}</table><p>Landing ${show(g.landing.distance, "ft")} from the pad at ${g.landing.bearing.toFixed(0)}°, ${g.landing.lat.toFixed(5)}, ${g.landing.lon.toFixed(5)}.</p></section>`
     : "";
+  const w = flight.gps ? windProfile(flight.gps, A) : null;
+  const wspd = (v: number) => show(v * 0.681818, "mph");
+  const windBlock = w
+    ? `<section><h2>Wind from GPS drift</h2><p>Average ${wspd(w.mean.speed)} from the ${compassName(w.mean.fromDeg)} (${w.mean.fromDeg.toFixed(0)}°), measured from the drift under a settled parachute.</p><table><tr><th>Altitude (${e(cu("ft"))} AGL)</th><th class="n">Speed</th><th class="n">From</th></tr>${w.bins
+        .map((b) => `<tr><td>${conv(b.lo, "ft")[0].toFixed(0)}-${conv(b.hi, "ft")[0].toFixed(0)}</td><td class="n">${wspd(b.speed)}</td><td class="n">${compassName(b.fromDeg)} ${b.fromDeg.toFixed(0)}°</td></tr>`)
+        .join("")}</table></section>`
+    : "";
+  const weight = recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0) || null;
+  const desc = descentPhases(flight, A, weight);
+  const descBlock = desc.length
+    ? `<section><h2>Descent</h2><table><tr><th>Phase</th><th class="n">Rate</th><th class="n">At sea level</th><th class="n">CdA</th></tr>${desc
+        .map((d) => `<tr><td>${e(d.name)} <span style="color:#6b7891">(${conv(d.altTop, "ft")[0].toFixed(0)} to ${show(d.altBottom, "ft")})</span></td><td class="n">${show(d.rate, "ft/s", 1)}</td><td class="n">${show(d.seaLevelRate, "ft/s", 1)}</td><td class="n">${show(d.cdA, "ft²", 1)}</td></tr>`)
+        .join("")}</table></section>`
+    : "";
+  const notesBlock = marks.length
+    ? `<section><h2>Notes on the timeline</h2><table><tr><th style="width:90px">Time</th><th>Note</th></tr>${marks
+        .map((m) => `<tr><td style="white-space:nowrap">${tLabel(m.t)} s</td><td>${e(m.text)}</td></tr>`)
+        .join("")}</table></section>`
+    : "";
   const mine = keyNumbersOf(A);
   const cmpBlock = cmps.length
-    ? `<section><h2>Comparison</h2><table><tr><th>Metric</th><th class="n">This flight</th>${cmps.map((c) => `<th class="n">${e(c.trace.kind === "sim" ? "Sim: " + c.trace.name : c.trace.name)}</th>`).join("")}<th></th></tr>${KEY_ROWS.map(
+    ? `<section><h2>Comparison</h2><p>Lined up at ${ALIGN_NAME[alignAt]}${cmps.some((c) => c.offset) ? `; shifts: ${cmps.map((c) => `${e(c.trace.name)} ${c.offset >= 0 ? "+" : ""}${c.offset.toFixed(2)} s`).join(", ")}` : ""}.</p><table><tr><th>Metric</th><th class="n">This flight</th>${cmps.map((c) => `<th class="n">${e(c.trace.kind === "sim" ? "Sim: " + c.trace.name : c.trace.name)}</th>`).join("")}<th></th></tr>${KEY_ROWS.map(
         ({ k, label, unit }) => `<tr><td>${label}</td><td class="n">${fmt(mine[k], unit)}</td>${cmps.map((c) => `<td class="n">${fmt(c.trace.key[k], unit)}</td>`).join("")}<td>${cu(unit)}</td></tr>`,
       ).join("")}</table></section>`
     : "";
@@ -1068,7 +1087,9 @@ async function buildReport() {
         <section><h2>Events</h2><table><tr><th>Event</th><th class="n">Time</th><th class="n">Altitude</th></tr>${evRows}</table></section>
       </div>
     </div>
+    ${notesBlock}
     ${gpsBlock}
+    <div class="cols">${descBlock}${windBlock}</div>
     ${cmpBlock}
     ${shot3d ? `<figure><img src="${shot3d}" alt="3D view of the trajectory" /></figure>` : ""}
     ${figs.map((f) => `<figure><img src="${f.url}" alt="${e(f.title)} chart" /></figure>`).join("")}
