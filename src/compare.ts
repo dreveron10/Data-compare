@@ -34,6 +34,8 @@ export interface ActiveCompare {
   color: string;
   /** the comparison's own flight and analysis (Blue Raven comparisons), for per-flight checks */
   src?: { flight: BlueRavenFlight; analysis: Analysis };
+  /** set by hand: this unit flew in the same rocket (overrides the logger-clock match) */
+  sameRocket?: boolean;
 }
 
 export interface CompareTrace {

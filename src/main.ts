@@ -319,16 +319,21 @@ async function fetchSample(sn: string): Promise<InFile[]> {
   return files.filter((x): x is NonNullable<typeof x> => x !== null);
 }
 
+/** same rocket: the user's choice if they made one, otherwise the logger clocks (same date, liftoff within 2 min) */
+function isSameRocket(c: ActiveCompare): boolean {
+  if (!c.src || !A || !flight) return false;
+  return c.sameRocket ?? sameFlight(flight, A, c.src.flight, c.src.analysis);
+}
 /** two Blue Ravens that flew in the same rocket: an agreement table instead of a flight-to-flight comparison */
 function renderRedundancy() {
-  const pairs = A && flight ? cmps.filter((c) => c.src && sameFlight(flight!, A!, c.src.flight, c.src.analysis)) : [];
+  const pairs = cmps.filter(isSameRocket);
   $("cmp-redund").innerHTML = pairs.map((c) => {
     const r = redundancy(flight!, A!, c.src!.flight, c.src!.analysis);
     const bad = r.rows.filter((x) => x.flag).length;
-    return `<details class="redund" open><summary><i class="sw" style="background:${c.color}"></i>Same flight as ${escapeHtml(c.trace.name)}: ${bad ? `${bad} thing${bad === 1 ? "" : "s"} disagree` : "the two altimeters agree"}</summary>
+    return `<details class="redund" open><summary><i class="sw" style="background:${c.color}"></i>Same rocket as ${escapeHtml(c.trace.name)}: ${bad ? `${bad} thing${bad === 1 ? "" : "s"} disagree` : "the two altimeters agree"}</summary>
       <table class="metrics redund-t"><tr><th></th><th>This unit</th><th>Other unit</th><th>Difference</th></tr>${r.rows
         .map((x) => `<tr class="${x.flag ? "flag" : ""}"><td>${escapeHtml(x.label)}</td><td>${escapeHtml(x.a)}</td><td>${escapeHtml(x.b)}</td><td>${escapeHtml(x.diff)}${x.flag ? '<span class="sr-only"> (disagrees)</span>' : ""}</td></tr>`).join("")}</table>
-      <p class="muted small">Matched on the logger clocks (same date, liftoff within 2 minutes). Baro offset is the median altitude difference from liftoff to landing, skipping 1.5 s around each pyro fire. A steady offset is usually pad altitude or port size; a spread that grows during descent points at a leaky bay or blocked port. Flagged: apogee off by more than 2% (${show(30, "ft")} minimum), fire times more than 0.5 s apart or a channel firing on one unit only.</p>
+      <p class="muted small">${c.sameRocket === undefined ? "Matched on the logger clocks (same date, liftoff within 2 minutes)." : "Marked as the same rocket by hand."} Baro offset is the median altitude difference from liftoff to landing, skipping 1.5 s around each pyro fire. A steady offset is usually pad altitude or port size; a spread that grows during descent points at a leaky bay or blocked port. Flagged: apogee off by more than 2% (${show(30, "ft")} minimum), fire times more than 0.5 s apart or a channel firing on one unit only.</p>
     </details>`;
   }).join("");
 }
@@ -357,6 +362,7 @@ function renderCompare() {
   $("cmp-list").innerHTML = cmps
     .map((c) => `<div class="cmp-item"><i style="background:${c.color}"></i><span class="nm" title="${escapeHtml(c.trace.name)}">${c.trace.kind === "sim" ? "Sim: " : ""}${escapeHtml(c.trace.name)}</span>
       <label class="off">shift <input type="number" step="0.1" value="${c.offset}" data-off="${c.id}" aria-label="Time shift in seconds" /> s</label>
+      ${c.src ? `<label class="same" title="Two altimeters in one rocket: show how well they agree. Found from the logger clocks; tick or untick if the clocks are off."><input type="checkbox" data-same="${c.id}" ${isSameRocket(c) ? "checked" : ""} /> same rocket</label>` : ""}
       <button class="x" data-rmc="${c.id}" aria-label="Remove comparison">×</button></div>`)
     .join("");
   const mine = keyNumbersOf(A);
@@ -1649,6 +1655,11 @@ $("cmp-list").addEventListener("click", (e) => {
 });
 $("cmp-list").addEventListener("change", (e) => {
   const el = e.target as HTMLInputElement;
+  if (el.dataset.same) {
+    const s = cmps.find((x) => x.id === el.dataset.same);
+    if (s) { s.sameRocket = el.checked; renderCompare(); }
+    return;
+  }
   const c = cmps.find((x) => x.id === el.dataset.off);
   const v = parseFloat(el.value);
   if (!c || !Number.isFinite(v)) return;
@@ -1778,7 +1789,7 @@ async function buildReport() {
           : `<tr><td>${e(x.name)}</td><td class="n">${x.hangDeg.toFixed(0)}°</td><td class="n">± ${x.swingDeg.toFixed(0)}°</td><td class="n">${x.periodS !== null ? x.periodS.toFixed(1) + " s" : "-"}</td><td class="n">${(x.spinDps / 360).toFixed(2)} rev/s</td></tr>`)
         .join("")}</table><p style="color:#6b7891;font-size:9pt">Angle from vertical (0° nose up). Swing is half the 10th to 90th percentile spread of tilt, from 2 s after each opening.</p></section>`
     : "";
-  const redPairs = cmps.filter((c) => c.src && sameFlight(flight!, A!, c.src.flight, c.src.analysis));
+  const redPairs = cmps.filter(isSameRocket);
   const redundBlock = redPairs.map((c) => {
     const r = redundancy(flight!, A!, c.src!.flight, c.src!.analysis);
     return `<section><h2>Altimeter agreement: ${e(c.trace.name)}</h2><table><tr><th></th><th class="n">This unit</th><th class="n">Other unit</th><th class="n">Difference</th></tr>${r.rows
@@ -2030,7 +2041,7 @@ $("cmp-csv").addEventListener("click", () => {
     rows.push(["Student Launch checks", "judged with this flight's Vehicle card and Recovery limits"]);
     rows.push(["Check", "Limit", me, ...withSrc.map((c) => c.trace.name)]);
     sl.forEach((r, i) => rows.push([r.label, r.limit, v(r), ...sets.map((s) => v(s.find((x) => x.label === r.label) ?? s[i]))]));
-    for (const c of withSrc.filter((c) => sameFlight(flight!, A!, c.src!.flight, c.src!.analysis))) {
+    for (const c of withSrc.filter(isSameRocket)) {
       const red = redundancy(flight, A, c.src!.flight, c.src!.analysis);
       rows.push([]);
       rows.push([`Altimeter agreement with ${c.trace.name}`]);
