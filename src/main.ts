@@ -817,10 +817,14 @@ function measuredStats() {
   const out: {
     coastCd?: number | null; impulseNs?: number | null; maxQ?: number | null; maxMach?: number | null;
     padBattV?: number | null; minBattV?: number | null; dataWarnings?: number | null;
+    slPass?: number | null; slOver?: string[];
   } = {
     maxQ: aero?.maxQ ?? null, maxMach: aero?.maxMach ?? null,
     padBattV: Number.isFinite(pad) ? pad : null, minBattV: Number.isFinite(low) ? low : null, dataWarnings,
   };
+  const sl = slRows();
+  out.slPass = sl.filter((r) => r.verdict === "pass").length;
+  out.slOver = sl.filter((r) => r.verdict === "fail").map((r) => r.label);
   if (flight.hr && A.axialAccel) {
     const cc = coastCfg(), mc = motorCfg();
     const m = cc.massLb ?? recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
@@ -1964,6 +1968,13 @@ $("lib-log").addEventListener("click", () => {
   downloadBlob(`flight-log-${new Date().toISOString().slice(0, 10)}.csv`, new Blob(["\ufeff" + csv], { type: "text/csv" }));
 });
 
+/** Student Launch tally saved with the flight (flights saved before this existed show nothing) */
+function slChip(e: LibraryEntry) {
+  const p = e.stats.slPass, over = e.stats.slOver;
+  if (p == null || !over) return "";
+  const tip = over.length ? `Over the limit when saved: ${over.join(", ")}` : "Every Student Launch check that could run passed when saved";
+  return `<span class="tag sl-chip ${over.length ? "bad" : "good"}" title="${escapeHtml(tip)}">SL ${p} ✓${over.length ? ` ${over.length} ✕` : ""}<span class="sr-only">: ${escapeHtml(tip)}</span></span>`;
+}
 async function renderLibrary() {
   const all = await listEntries();
   const q = $<HTMLInputElement>("lib-search").value.trim().toLowerCase();
@@ -1998,7 +2009,7 @@ async function renderLibrary() {
       .map((e) => `<tr class="${e.id === currentEntryId ? "current" : ""}${libSel.includes(e.id) ? " sel" : ""}">
         <td class="pick"><input type="checkbox" data-pick="${e.id}" ${libSel.includes(e.id) ? "checked" : ""} aria-label="Select ${escapeHtml(e.name)}" /></td>
         <td>${escapeHtml(e.date || "-")}</td>
-        <td>${hl(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}
+        <td>${hl(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}${slChip(e)}
           <div class="chips">${e.vehicle ? `<span class="chipline">${hl(e.vehicle)}</span>` : ""}${e.motor ? `<span class="chipline">${hl(e.motor)}</span>` : ""}${(e.tags ?? []).map((tg) => `<span class="chipline tagc">${hl(tg)}</span>`).join("")}</div></td>
         <td class="num">${show(e.stats.apogee, "ft")}</td>
         <td class="num">${num(e.stats.flightTime, 1)} s</td>

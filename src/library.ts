@@ -24,6 +24,8 @@ export interface LibraryEntry {
     maxQ?: number | null; maxMach?: number | null;
     /** altimeter health: battery on the pad, lowest in flight, and data-quality warnings */
     padBattV?: number | null; minBattV?: number | null; dataWarnings?: number | null;
+    /** Student Launch checks at save time: how many passed, and the labels over the limit */
+    slPass?: number | null; slOver?: string[];
   };
   files: StoredFile[];
   /** recovery check setup for this vehicle (section masses, limits) */
