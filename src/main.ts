@@ -992,6 +992,19 @@ function renderSL() {
   $("sl-list").innerHTML = rows.map((r) => `<li class="${r.verdict}"><span class="mark" aria-hidden="true">${r.verdict === "pass" ? "✓" : r.verdict === "fail" ? "✕" : "–"}</span><span class="lbl">${escapeHtml(r.label)}${r.note ? `<small>${escapeHtml(r.note)}</small>` : ""}</span><span class="val">${escapeHtml(r.value)}</span><span class="lim">${escapeHtml(r.limit)}</span><span class="sr-only">${r.verdict === "pass" ? "pass" : r.verdict === "fail" ? "over the limit" : "not checked"}</span></li>`).join("");
   renderSLCompare(rows);
 }
+/** printed-report version of the side-by-side table (empty without Blue Raven comparisons) */
+function slSideBySide(rows: SLRow[], e: (x: string) => string): string {
+  const others = cmps.filter((c) => c.src);
+  if (!others.length) return "";
+  const sets = others.map((c) => slRows(c.src!.flight, c.src!.analysis));
+  const cell = (r: SLRow | undefined) => r ? `<td class="n ${r.verdict}">${e(r.value)}${r.verdict === "fail" ? " (over)" : ""}</td>` : '<td class="n">-</td>';
+  const tally = (rs: SLRow[]) => `${rs.filter((r) => r.verdict === "pass").length} pass, ${rs.filter((r) => r.verdict === "fail").length} over`;
+  return `<h3 style="margin:12px 0 4px;font-size:12pt">Side by side with the comparisons</h3>
+    <table><tr><th>Check</th><th class="n">Limit</th><th class="n">This flight</th>${others.map((c) => `<th class="n">${e(c.trace.name)}</th>`).join("")}</tr>
+    ${rows.map((r, i) => `<tr><td>${e(r.label)}</td><td class="n">${e(r.limit)}</td>${cell(r)}${sets.map((s) => cell(s.find((x) => x.label === r.label) ?? s[i])).join("")}</tr>`).join("")}
+    <tr><td><b>Total</b></td><td></td><td class="n"><b>${tally(rows)}</b></td>${sets.map((s) => `<td class="n"><b>${tally(s)}</b></td>`).join("")}</tr></table>
+    <p style="color:#6b7891;font-size:9pt">Comparisons are judged with this flight's Vehicle card and Recovery limits.</p>`;
+}
 /** the same checks for each Blue Raven comparison, side by side with this flight */
 function renderSLCompare(rows: SLRow[]) {
   const box = $("sl-cmp");
@@ -1718,7 +1731,7 @@ async function buildReport() {
   const sl = slRows();
   const slBlock = `<section><h2>Student Launch checks</h2><table><tr><th>Check</th><th class="n">Value</th><th class="n">Limit</th><th></th></tr>${sl
     .map((r) => `<tr><td>${e(r.label)}${r.note ? ` <span style="color:#6b7891">(${e(r.note)})</span>` : ""}</td><td class="n">${e(r.value)}</td><td class="n">${e(r.limit)}</td><td class="${r.verdict}">${r.verdict === "pass" ? "Pass" : r.verdict === "fail" ? "Over" : ""}</td></tr>`)
-    .join("")}</table></section>`;
+    .join("")}</table>${slSideBySide(sl, e)}</section>`;
   // launch and airframe: rail exit, angle of attack, thrust-to-weight, fin flutter
   const veh = getVehicle(vehicleKey);
   const launchRows: [string, string][] = [];
