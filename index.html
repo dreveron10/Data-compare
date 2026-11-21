@@ -23,6 +23,7 @@
         <button class="btn" id="lib-open">Library</button>
         <button class="btn" id="save-open" hidden>Save flight</button>
         <button class="btn" id="report-open" hidden>Print report</button>
+        <button class="btn" id="about-open" title="How the numbers are made">Methods</button>
         <button class="btn" id="share-open" hidden title="Download this flight as one file you can send to a teammate">Share file</button>
         <label class="btn primary">
           Open flight files
@@ -240,6 +241,48 @@
         <div id="charts"></div>
       </section>
     </main>
+    <dialog id="about-dialog" class="dlg wide">
+      <div class="dlg-head">
+        <h3>How the numbers are made</h3>
+        <button class="btn small-btn" id="about-close">Close</button>
+      </div>
+      <div class="methods">
+        <p class="muted small">Everything runs in your browser. Flight files, videos and the library never leave this computer unless you export or share them.</p>
+        <section>
+          <h4>What it reads</h4>
+          <p>Blue Raven high-rate (500 Hz) and low-rate (50 Hz) CSVs, the flight summary and the deployment settings workbook. Featherweight GPS logs and summaries. OpenRocket CSV exports for comparison. Files are recognised by their columns, not their names.</p>
+        </section>
+        <section>
+          <h4>Altitude and apogee</h4>
+          <p>Baro altitude is filtered with a 1 s running median and then a 0.2 s moving average, so ejection-charge pressure spikes don't move the curve. AGL is that altitude minus the pad altitude from the summary. Apogee is the filtered peak, searched only within 2 s of the inertial apogee so a spike can't be mistaken for it.</p>
+        </section>
+        <section>
+          <h4>Events and deployments</h4>
+          <p>Fire times come from the summary when it has them, then from the channel continuity dropping below 1 V, then from the low-rate fired flag (which lags the real fire by about 1.4 s). Deployment conditions are checked in the 0.15 s before each fire.</p>
+        </section>
+        <section>
+          <h4>Attitude and the 3D replay</h4>
+          <p>The Blue Raven quaternions are relative to the pad. The rocket axis comes from the summary's direction of first motion. Heading is found by matching the rocket's azimuth to the inertial velocity during ascent; both quaternion conventions and both crossrange signs are tried and the best fit wins. Roll is shown about the rocket axis.</p>
+        </section>
+        <section>
+          <h4>GPS alignment</h4>
+          <p>The GPS clock is matched to the Blue Raven by cross-matching vertical velocity over plus or minus 3 s (you can override the offset). The Blue Raven track is rotated onto true east and north by least squares. On the 3D path the ascent is blended so it meets the GPS position at apogee, and the descent uses GPS position directly. Launch time comes from the GPS UTC column.</p>
+        </section>
+        <section>
+          <h4>Recovery and descent</h4>
+          <p>Kinetic energy is ½·(m/32.174)·v² in ft-lbf, using the section masses you enter. Parachute CdA is 2W/(ρv²), with air density from the logged pressure and temperature. Wind is the GPS horizontal drift under a settled parachute, binned by altitude, skipping the first 4 s after each deployment.</p>
+        </section>
+        <section>
+          <h4>Comparisons</h4>
+          <p>Sims and other flights are lined up at liftoff, apogee or main deploy, then shifted by the time you set. Sim acceleration is shown the way an accelerometer would read it (kinematic plus 1 g).</p>
+        </section>
+        <section>
+          <h4>Earth view</h4>
+          <p>Esri World Imagery draped on AWS Terrain Tiles (Terrarium elevation), loaded in rings from about 1 m per pixel near the pad out to a few km per pixel at the horizon, with Earth curvature.</p>
+        </section>
+        <p class="muted small">Findings are rules of thumb, not verdicts. Check anything that matters against the raw logs.</p>
+      </div>
+    </dialog>
     <dialog id="save-dialog" class="dlg">
       <form method="dialog" id="save-form">
         <h3 id="save-title">Save flight to library</h3>

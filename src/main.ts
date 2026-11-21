@@ -1316,6 +1316,10 @@ $("lib-sort").addEventListener("change", () => renderLibrary());
 
 $("lib-open").addEventListener("click", async () => { await renderLibrary(); libDlg.showModal(); });
 $("lib-close").addEventListener("click", () => libDlg.close());
+const aboutDlg = $<HTMLDialogElement>("about-dialog");
+$("about-open").addEventListener("click", () => aboutDlg.showModal());
+$("about-close").addEventListener("click", () => aboutDlg.close());
+aboutDlg.addEventListener("click", (e) => { if (e.target === aboutDlg) aboutDlg.close(); });
 $("lib-list").addEventListener("click", async (ev) => {
   const b = (ev.target as HTMLElement).closest("button[data-act]") as HTMLButtonElement | null;
   if (!b) return;

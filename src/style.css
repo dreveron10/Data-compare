@@ -435,3 +435,16 @@ table.wind .bar { position: absolute; left: 0; bottom: -3px; height: 3px; border
 /* chart playhead (moved with a transform, no canvas redraw) */
 .chart .u-over { overflow: hidden; }
 .chart .playhead { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: #ff7a1a; pointer-events: none; will-change: transform; }
+
+/* methods dialog */
+.methods { max-height: min(70vh, 720px); overflow: auto; padding-right: 6px; }
+.methods section { padding: 10px 0; border-top: 1px solid var(--line); }
+.methods h4 { margin: 0 0 4px; font-size: 14.5px; font-weight: 600; }
+.methods p { margin: 0; font-size: 13.5px; line-height: 1.55; max-width: 68ch; color: #c9d3e6; }
+.methods > p.muted { margin: 4px 0 10px; }
+@media (min-width: 900px) {
+  .methods { columns: 2; column-gap: 36px; }
+  .methods section { break-inside: avoid; }
+  .methods > p.muted { column-span: all; }
+}
+.methods > p:last-child { column-span: all; margin-top: 10px; }
