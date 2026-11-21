@@ -6,6 +6,10 @@ import { Charts } from "./charts";
 import { KEY_ROWS, keyNumbersOf, traceFromFlight, traceFromSim, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earth";
+import {
+  deleteEntry, exportBackup, getEntry, importBackup, listEntries, newId, putEntry, requestPersistence, storageUse,
+  type LibraryEntry,
+} from "./library";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -37,6 +41,9 @@ let lastFrame = 0;
 let lastChartUpdate = 0;
 let gpsOffsetOverride: number | undefined;
 let cmp: CompareTrace | undefined;
+let lastFiles: InFile[] = [];
+let cmpFiles: InFile[] | undefined;
+let currentEntryId: string | undefined;
 
 // ---------- Earth view (terrain + imagery) ----------
 let satOn = true;
@@ -68,7 +75,7 @@ $("sat-toggle").addEventListener("click", () => {
 }
 
 // ---------- loading ----------
-async function loadFiles(files: { name: string; text?: string; buffer?: ArrayBuffer }[]) {
+async function loadFiles(files: InFile[], entryId?: string) {
   const warn: string[] = [];
   try {
     const res = await loadBlueRaven(files);
@@ -76,10 +83,15 @@ async function loadFiles(files: { name: string; text?: string; buffer?: ArrayBuf
     if (!res.flight.lr) throw new Error("No Blue Raven LR file found. Include the *_LR_*.csv file.");
     gpsOffsetOverride = undefined;
     cmp = undefined;
+    cmpFiles = undefined;
     const a = analyze(res.flight);
     warn.push(...a.warnings);
     flight = res.flight;
     A = a;
+    lastFiles = files;
+    currentEntryId = entryId;
+    $("save-open").hidden = false;
+    $("save-open").textContent = entryId ? "Edit saved flight" : "Save flight";
     showFlight();
   } catch (e) {
     warn.unshift((e as Error).message);
@@ -116,6 +128,7 @@ async function loadCompare(files: InFile[]) {
       if (!res.flight.lr) throw new Error("Comparison needs an OpenRocket CSV export or a Blue Raven LR file.");
       cmp = traceFromFlight(analyze(res.flight), res.flight);
     }
+    cmpFiles = files;
     applyCompare();
     showWarnings(A.warnings);
   } catch (e) {
@@ -137,7 +150,8 @@ async function fetchSample(sn: string): Promise<InFile[]> {
   const files = await Promise.all(
     names.map(async (n) => {
       const r = await fetch(base + n);
-      if (!r.ok) return null;
+      // skip missing files (some static servers answer a missing file with the HTML page)
+      if (!r.ok || (r.headers.get("content-type") ?? "").includes("text/html")) return null;
       return n.endsWith(".xlsx") ? { name: n, buffer: await r.arrayBuffer() } : { name: n, text: await r.text() };
     }),
   );
@@ -501,7 +515,144 @@ $("cmp-sample").addEventListener("click", async () => {
   setBusy(true);
   try { await loadCompare(await fetchSample("SN1742")); } finally { setBusy(false); }
 });
-$("cmp-clear").addEventListener("click", () => { cmp = undefined; applyCompare(); });
+$("cmp-clear").addEventListener("click", () => { cmp = undefined; cmpFiles = undefined; applyCompare(); });
+
+// ---------- library (saved in this browser) ----------
+const saveDlg = $<HTMLDialogElement>("save-dialog");
+const libDlg = $<HTMLDialogElement>("lib-dialog");
+
+function flightDate(): string {
+  // the GPS clock is reliable; the Blue Raven clock may not be set
+  const g = flight?.gps;
+  if (g) {
+    const d = new Date(g.launchUnix * 1000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  return flight?.lr?.date ?? "";
+}
+
+$("save-open").addEventListener("click", async () => {
+  if (!flight || !A) return;
+  const existing = currentEntryId ? await getEntry(currentEntryId) : undefined;
+  $("save-title").textContent = existing ? "Edit saved flight" : "Save flight to library";
+  $<HTMLInputElement>("save-name").value = existing?.name ?? flight.gps?.name ?? flight.name;
+  $<HTMLInputElement>("save-date").value = existing?.date ?? flightDate();
+  $<HTMLTextAreaElement>("save-notes").value = existing?.notes ?? "";
+  const simOk = !existing && cmp?.kind === "sim" && !!cmpFiles;
+  $("save-sim-row").hidden = !simOk;
+  if (simOk) $("save-sim-label").textContent = `Also save the sim "${cmp!.name}"`;
+  const kb = lastFiles.reduce((n, f) => n + (f.buffer?.byteLength ?? f.text?.length ?? 0), 0) / 1024;
+  $("save-files").textContent = `${lastFiles.length} files (${kb > 1024 ? (kb / 1024).toFixed(1) + " MB" : kb.toFixed(0) + " KB"}): ${lastFiles.map((f) => f.name).join(", ")}`;
+  saveDlg.showModal();
+});
+
+$("save-form").addEventListener("submit", async (e) => {
+  const submitter = (e as SubmitEvent).submitter as HTMLButtonElement | null;
+  if (submitter?.value !== "save" || !A || !flight) return;
+  const name = $<HTMLInputElement>("save-name").value.trim() || flight.name;
+  const date = $<HTMLInputElement>("save-date").value;
+  const notes = $<HTMLTextAreaElement>("save-notes").value.trim();
+  const k = keyNumbersOf(A);
+  const entry: LibraryEntry = {
+    id: currentEntryId ?? newId(),
+    kind: "flight", name, date, notes,
+    savedAt: new Date().toISOString(),
+    stats: { apogee: k.apogee, flightTime: k.flightTime, drift: k.drift, maxVel: k.maxVel, hasGps: !!flight.gps },
+    files: lastFiles,
+  };
+  try {
+    await putEntry(entry);
+    if (!$("save-sim-row").hidden && $<HTMLInputElement>("save-sim").checked && cmp && cmpFiles) {
+      await putEntry({
+        id: newId(), kind: "sim", name: cmp.name, date, notes: `Sim for ${name}`,
+        savedAt: new Date().toISOString(),
+        stats: { apogee: cmp.key.apogee, flightTime: cmp.key.flightTime, drift: cmp.key.drift, maxVel: cmp.key.maxVel },
+        files: cmpFiles,
+      });
+    }
+    currentEntryId = entry.id;
+    $("save-open").textContent = "Edit saved flight";
+    requestPersistence();
+    showWarnings(A.warnings);
+  } catch (err) {
+    showWarnings([`Could not save to the library: ${(err as Error).message}`]);
+  }
+});
+
+const num = (v: number | null | undefined, d = 0) => (v === null || v === undefined || !Number.isFinite(v) ? "-" : v.toFixed(d));
+
+async function renderLibrary() {
+  const list = await listEntries();
+  const el = $("lib-list");
+  if (list.length === 0) {
+    el.innerHTML = '<div class="lib-empty">No saved flights yet. Load a flight and press <b>Save flight</b>.</div>';
+  } else {
+    el.innerHTML = `<table class="lib-table"><tr><th>Date</th><th>Name</th><th style="text-align:right">Apogee</th><th style="text-align:right">Flight time</th><th style="text-align:right">Drift</th><th>Notes</th><th></th></tr>${list
+      .map((e) => `<tr class="${e.id === currentEntryId ? "current" : ""}">
+        <td>${escapeHtml(e.date || "-")}</td>
+        <td>${escapeHtml(e.name)}${e.kind === "sim" ? '<span class="tag">SIM</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}</td>
+        <td class="num">${num(e.stats.apogee)} ft</td>
+        <td class="num">${num(e.stats.flightTime, 1)} s</td>
+        <td class="num">${e.stats.drift != null ? num(e.stats.drift) + " ft" : "-"}</td>
+        <td class="notes">${escapeHtml(e.notes)}</td>
+        <td class="acts">
+          ${e.kind === "flight" ? `<button class="btn small-btn" data-act="open" data-id="${e.id}">Open</button>` : ""}
+          <button class="btn small-btn" data-act="cmp" data-id="${e.id}" ${!A || e.id === currentEntryId ? "disabled" : ""}>Compare</button>
+          <button class="btn small-btn danger" data-act="del" data-id="${e.id}">Delete</button>
+        </td></tr>`)
+      .join("")}</table>`;
+  }
+  const u = await storageUse();
+  $("lib-usage").textContent = `${list.length} saved${u ? ` · ${(u.used / 1048576).toFixed(1)} MB used of ${(u.quota / 1073741824).toFixed(1)} GB available` : ""}`;
+}
+
+$("lib-open").addEventListener("click", async () => { await renderLibrary(); libDlg.showModal(); });
+$("lib-close").addEventListener("click", () => libDlg.close());
+$("lib-list").addEventListener("click", async (ev) => {
+  const b = (ev.target as HTMLElement).closest("button[data-act]") as HTMLButtonElement | null;
+  if (!b) return;
+  const entry = await getEntry(b.dataset.id!);
+  if (!entry) return;
+  if (b.dataset.act === "open") {
+    libDlg.close();
+    setBusy(true);
+    try { await loadFiles(entry.files, entry.id); } finally { setBusy(false); }
+  } else if (b.dataset.act === "cmp") {
+    libDlg.close();
+    await loadCompare(entry.files);
+  } else if (b.dataset.act === "del") {
+    if (!confirm(`Delete "${entry.name}" from the library? This cannot be undone (unless it is in a backup).`)) return;
+    await deleteEntry(entry.id);
+    if (entry.id === currentEntryId) {
+      currentEntryId = undefined;
+      $("save-open").textContent = "Save flight";
+    }
+    await renderLibrary();
+  }
+});
+$("lib-export").addEventListener("click", async () => {
+  const blob = await exportBackup();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `data-compare-library-${new Date().toISOString().slice(0, 10)}.zip`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+{
+  const inp = $<HTMLInputElement>("lib-import");
+  inp.addEventListener("change", async () => {
+    const f = inp.files?.[0];
+    inp.value = "";
+    if (!f) return;
+    try {
+      const n = await importBackup(await f.arrayBuffer());
+      await renderLibrary();
+      $("lib-usage").textContent = `Imported ${n} entr${n === 1 ? "y" : "ies"}. ` + $("lib-usage").textContent;
+    } catch (err) {
+      alert(`That file is not a Data Compare backup (${(err as Error).message}).`);
+    }
+  });
+}
 
 // open a sample straight from the URL, e.g. ?sample=SN0614
 const qs = new URLSearchParams(location.search).get("sample");

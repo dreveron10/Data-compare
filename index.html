@@ -16,6 +16,8 @@
         </div>
       </div>
       <div class="top-actions">
+        <button class="btn" id="lib-open">Library</button>
+        <button class="btn" id="save-open" hidden>Save flight</button>
         <label class="btn primary">
           Open flight files
           <input id="file-input" type="file" multiple accept=".csv,.xlsx,.kml" hidden />
@@ -136,6 +138,38 @@
         <div id="charts"></div>
       </section>
     </main>
+    <dialog id="save-dialog" class="dlg">
+      <form method="dialog" id="save-form">
+        <h3 id="save-title">Save flight to library</h3>
+        <p class="muted small">Saved in this browser only. The original files are stored, so opening it later gives the same analysis.</p>
+        <label class="fld">Name<input id="save-name" required maxlength="120" /></label>
+        <label class="fld">Flight date<input id="save-date" type="date" /></label>
+        <label class="fld">Notes<textarea id="save-notes" rows="4" placeholder="Motor, launch site, weather, what went right or wrong..."></textarea></label>
+        <label class="chk" id="save-sim-row" hidden><input type="checkbox" id="save-sim" checked /> <span id="save-sim-label"></span></label>
+        <div class="muted small" id="save-files"></div>
+        <div class="dlg-actions">
+          <button class="btn" value="cancel" formnovalidate>Cancel</button>
+          <button class="btn primary" id="save-confirm" value="save">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="lib-dialog" class="dlg wide">
+      <div class="dlg-head">
+        <h3>Flight library</h3>
+        <button class="btn small-btn" id="lib-close">Close</button>
+      </div>
+      <p class="muted small">Flights saved in this browser. Export a backup now and then: clearing browser data deletes the library.</p>
+      <div class="lib-list" id="lib-list"></div>
+      <div class="dlg-actions spread">
+        <span class="muted small" id="lib-usage"></span>
+        <span>
+          <label class="btn small-btn">Import backup<input id="lib-import" type="file" accept=".zip" hidden /></label>
+          <button class="btn small-btn" id="lib-export">Export backup</button>
+        </span>
+      </div>
+    </dialog>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
