@@ -1,5 +1,5 @@
 import "./style.css";
-import { analyze, indexAt, type Analysis } from "./analysis";
+import { analyze, flightPhases, indexAt, type Analysis } from "./analysis";
 import { CHANNELS, loadBlueRaven, type BlueRavenFlight, type Channel } from "./parsers/blueRaven";
 import { Replay3D, type CameraMode } from "./replay3d";
 import { Charts } from "./charts";
@@ -527,6 +527,13 @@ function renderSettings() {
 
 function renderScrubEvents() {
   const span = A!.tEnd - A!.tStart;
+  const pct = (x: number) => ((x - A!.tStart) / span) * 100;
+  $("scrub-phases").innerHTML = flightPhases(A!)
+    .map((p) => `<span title="${escapeHtml(p.name)}: T+${p.t0.toFixed(1)} to T+${p.t1.toFixed(1)} s" style="left:${pct(p.t0)}%;width:${pct(p.t1) - pct(p.t0)}%;background:${p.color}"></span>`)
+    .join("");
+  $("phase-legend").innerHTML = flightPhases(A!)
+    .map((p) => `<span><i style="background:${p.color}"></i>${escapeHtml(p.name)}</span>`)
+    .join("");
   $("scrub-events").innerHTML = A!.events
     .map((e) => `<span title="${escapeHtml(e.label)}" style="left:${((e.t - A!.tStart) / span) * 100}%;background:${e.color}"></span>`)
     .join("");

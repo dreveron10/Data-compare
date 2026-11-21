@@ -605,3 +605,37 @@ function slopeOf(t: ArrayLike<number>, y: ArrayLike<number>, t0: number, t1: num
   const d = n * stt - st * st;
   return d === 0 ? null : (n * sty - st * sy) / d;
 }
+
+// ---------- flight phases (for timeline and chart bands) ----------
+
+export interface Phase { name: string; t0: number; t1: number; color: string }
+
+export const PHASE_COLORS: Record<string, string> = {
+  "On pad": "#3a4a6b",
+  Boost: "#ff7a1a",
+  Coast: "#f5c26b",
+  "Under drogue": "#b48cff",
+  "Under main": "#6cc4ff",
+  Landed: "#7bd88f",
+};
+
+export function flightPhases(a: Analysis): Phase[] {
+  const ev = (k: string) => a.events.find((e) => e.key === k)?.t;
+  const lift = ev("liftoff") ?? 0;
+  const burn = ev("burnout");
+  const apo = ev("apogee");
+  const main = ev("fire_Main");
+  const land = ev("landing");
+  const cuts: [string, number | undefined][] = [
+    ["On pad", a.tStart], ["Boost", lift], ["Coast", burn], ["Under drogue", apo],
+    ["Under main", main], ["Landed", land],
+  ];
+  const pts = cuts.filter((c): c is [string, number] => c[1] !== undefined && c[1] >= a.tStart && c[1] <= a.tEnd);
+  pts.sort((x, y) => x[1] - y[1]);
+  const out: Phase[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const t1 = i + 1 < pts.length ? pts[i + 1][1] : a.tEnd;
+    if (t1 > pts[i][1]) out.push({ name: pts[i][0], t0: pts[i][1], t1, color: PHASE_COLORS[pts[i][0]] });
+  }
+  return out;
+}

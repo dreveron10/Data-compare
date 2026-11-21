@@ -2,7 +2,8 @@
 
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import type { Analysis, FlightEvent } from "./analysis";
+import type { Analysis, FlightEvent, Phase } from "./analysis";
+import { flightPhases } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
 import { sampleAt, type ActiveCompare } from "./compare";
 import { cu, cv } from "./units";
@@ -47,6 +48,7 @@ export class Charts {
   private defs: ChartDef[] = [];
   private playhead = 0;
   private events: FlightEvent[] = [];
+  private phases: Phase[] = [];
   private syncingScale = false;
   private hidden = loadHidden();
   private flightName = "flight";
@@ -62,6 +64,7 @@ export class Charts {
     this.plots = [];
     this.host.innerHTML = "";
     this.events = a.events;
+    this.phases = flightPhases(a);
     this.flightName = slug(f.gps?.name ?? f.name) || "flight";
     const lr = f.lr!;
     const hr = f.hr;
@@ -229,6 +232,19 @@ export class Charts {
     const ctx = u.ctx;
     const { top, height } = u.bbox;
     ctx.save();
+    // phase bands along the bottom edge of the plot
+    const bandH = 4 * devicePixelRatio;
+    for (const ph of this.phases) {
+      const x0 = Math.max(u.bbox.left, u.valToPos(ph.t0, "x", true));
+      const x1 = Math.min(u.bbox.left + u.bbox.width, u.valToPos(ph.t1, "x", true));
+      if (x1 <= x0) continue;
+      ctx.globalAlpha = 0.07;
+      ctx.fillStyle = ph.color;
+      ctx.fillRect(x0, top, x1 - x0, height);
+      ctx.globalAlpha = 0.9;
+      ctx.fillRect(x0, top + height - bandH, x1 - x0, bandH);
+    }
+    ctx.globalAlpha = 1;
     for (const e of this.events) {
       const x = Math.round(u.valToPos(e.t, "x", true));
       if (x < u.bbox.left || x > u.bbox.left + u.bbox.width) continue;
