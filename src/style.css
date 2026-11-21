@@ -668,3 +668,4 @@ button.chipline:hover { border-color: var(--line); color: var(--ink, inherit); }
 .events li .ev-card b { font-weight: 500; color: var(--muted); display: inline-block; min-width: 92px; }
 .events li:hover .ev-card, .events li:focus-visible .ev-card { display: flex; }
 @media (hover: none) { .events li:hover .ev-card { display: none; } }
+.table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

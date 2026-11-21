@@ -1074,7 +1074,7 @@ function renderSLCompare(rows: SLRow[]) {
     : "<td>-</td>";
   const tally = (rs: SLRow[]) => `${rs.filter((r) => r.verdict === "pass").length} pass, ${rs.filter((r) => r.verdict === "fail").length} over`;
   box.innerHTML = `<h3>Side by side</h3>
-    <div class="table-scroll"><table class="sl-table">
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Student Launch checks side by side"><table class="sl-table">
       <tr><th>Check</th><th>This flight</th>${others.map((c) => `<th><span class="swatch" style="background:${c.color}"></span>${escapeHtml(c.trace.name)}</th>`).join("")}</tr>
       ${rows.map((r, i) => `<tr><td title="Limit: ${escapeHtml(r.limit)}">${escapeHtml(r.label)}<small>${escapeHtml(r.limit)}</small></td>${cell(r)}${sets.map((s) => cell(s.find((x) => x.label === r.label) ?? s[i])).join("")}</tr>`).join("")}
       <tr class="tot"><td>Total</td><td>${tally(rows)}</td>${sets.map((s) => `<td>${tally(s)}</td>`).join("")}</tr>
