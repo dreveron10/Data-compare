@@ -138,11 +138,11 @@ export class Charts {
       legend: { live: true },
       scales: { x: { time: false, min: a.tStart, max: a.tEnd }, y: { auto: true }, ...(d.y2Label ? { y2: { auto: true } } : {}) },
       axes: [
-        { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: "Flight time (s)", labelSize: 22, font: "11px Inter, system-ui", labelFont: "11px Inter, system-ui" },
-        { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: d.yLabel, labelSize: 22, size: 56, font: "11px Inter, system-ui", labelFont: "11px Inter, system-ui" },
+        { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: "Flight time (s)", labelSize: 22, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
+        { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: d.yLabel, labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
         // every chart reserves a right axis so the time axes line up across charts
         d.y2Label
-          ? { scale: "y2", side: 1, stroke: "#8a96b0", grid: { show: false }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: d.y2Label, labelSize: 22, size: 56, font: "11px Inter, system-ui", labelFont: "11px Inter, system-ui" }
+          ? { scale: "y2", side: 1, stroke: "#8a96b0", grid: { show: false }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: d.y2Label, labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" }
           : { scale: "y", side: 1, grid: { show: false }, ticks: { show: false }, values: () => [], size: 78 },
       ],
       series: [
@@ -196,8 +196,8 @@ export class Charts {
     if (px >= u.bbox.left && px <= u.bbox.left + u.bbox.width) {
       ctx.globalAlpha = 1;
       ctx.setLineDash([]);
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 1.5 * devicePixelRatio;
+      ctx.strokeStyle = "#ff7a1a";
+      ctx.lineWidth = 2 * devicePixelRatio;
       ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, top + height); ctx.stroke();
     }
     ctx.restore();

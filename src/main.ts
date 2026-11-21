@@ -168,7 +168,7 @@ function renderCompare() {
     return;
   }
   const mine = keyNumbersOf(A);
-  $("cmp-sub").innerHTML = `${cmp.kind === "sim" ? "OpenRocket sim" : "Flight"}: <b>${escapeHtml(cmp.name)}</b> · pink dashed in charts and 3D`;
+  $("cmp-sub").innerHTML = `${cmp.kind === "sim" ? "OpenRocket sim" : "Flight"}: <b>${escapeHtml(cmp.name)}</b>, shown pink dashed in charts and 3D`;
   const rows = KEY_ROWS.map(({ k, label, unit }) => {
     const a = mine[k], b = cmp!.key[k];
     if (a === null && b === null) return "";
@@ -214,7 +214,9 @@ function showFlight() {
   if (!A || !flight) return;
   app.classList.remove("empty");
   const lr = flight.lr!;
-  $("flight-name").textContent = `${flight.name} · ${lr.date} · flight #${flight.summary?.raw["Flight number"] ?? "?"}`;
+  const fdate = flightDate();
+  const fnum = flight.summary?.raw["Flight number"];
+  $("flight-name").textContent = `${flight.gps?.name ?? flight.name}${fdate ? `, ${new Date(fdate + "T12:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}` : ""}${fnum ? `, Blue Raven flight ${fnum}` : ""}`;
   scrub.min = String(A.tStart);
   scrub.max = String(A.tEnd);
   scrub.step = "0.002";
@@ -257,7 +259,7 @@ function renderGps() {
   const panel = $("gps-panel");
   panel.hidden = !g;
   if (!g || !flight?.gps) return;
-  $("gps-sub").textContent = `${flight.gps.name} · aligned ${g.manual ? "manually" : "automatically"} · heading fit ${(((g.yaw * 180) / Math.PI + 360) % 360).toFixed(0)}° · ascent mismatch ${g.ascentRms.toFixed(0)} ft RMS`;
+  $("gps-sub").textContent = `${flight.gps.name}, aligned ${g.manual ? "manually" : "automatically"}. Heading fit ${(((g.yaw * 180) / Math.PI + 360) % 360).toFixed(0)}°, ascent mismatch ${g.ascentRms.toFixed(0)} ft RMS.`;
   const rows = g.rows.map((r) => {
     let diff = "";
     if (r.br !== null && r.gps !== null && Number.isFinite(r.br) && Number.isFinite(r.gps)) {
@@ -354,7 +356,7 @@ function renderSettings() {
         return `<span class="cond${cls}">${escapeHtml(label)}</span>`;
       })
       .join("");
-    const delay = s.options["Use_Delay"]?.[ch] === "TRUE" ? ` · delay ${vals.delay} s` : "";
+    const delay = s.options["Use_Delay"]?.[ch] === "TRUE" ? `, ${vals.delay} s delay` : "";
     const when = fire ? `fired T+${fire.t.toFixed(2)} s` : "did not fire";
     return `<div class="settings-ch"><h4>${ch} <span class="muted small">(${when}${delay})</span></h4>${chips || '<span class="muted small">no conditions</span>'}</div>`;
   }).join("");
@@ -372,13 +374,13 @@ function renderScrubEvents() {
 function phaseAt(time: number) {
   const ev = (k: string) => A!.events.find((e) => e.key === k)?.t;
   const lo = ev("liftoff") ?? 0, bo = ev("burnout"), ap = ev("apogee"), mf = ev("fire_Main"), af = ev("fire_Apo"), la = ev("landing");
-  if (time < lo) return "ON PAD";
-  if (bo !== undefined && time < bo) return "BOOST";
-  if (ap !== undefined && time < ap) return "COAST";
-  if (la !== undefined && time >= la) return "LANDED";
-  if (mf !== undefined && time >= mf) return "MAIN DESCENT";
-  if (af !== undefined && time >= af) return "DROGUE DESCENT";
-  return "DESCENT";
+  if (time < lo) return "On pad";
+  if (bo !== undefined && time < bo) return "Boost";
+  if (ap !== undefined && time < ap) return "Coast";
+  if (la !== undefined && time >= la) return "Landed";
+  if (mf !== undefined && time >= mf) return "Under main";
+  if (af !== undefined && time >= af) return "Under drogue";
+  return "Descent";
 }
 
 function updateHud(time: number) {
@@ -398,14 +400,15 @@ function updateHud(time: number) {
     rr = A!.rollRate[k].toFixed(0);
   }
   const descent = time > A!.path.t[A!.path.apogeeIdx];
+  const v = (n: string, unit: string) => `${n}<small>${unit}</small>`;
   $("hud").innerHTML = `
     <div class="phase">${phaseAt(time)}</div>
-    <div><div class="k">Altitude AGL</div><div class="v">${alt.toFixed(0)} ft</div></div>
-    <div><div class="k">Vertical vel</div><div class="v">${(descent ? A!.baroVel[i] : vUp).toFixed(0)} ft/s</div></div>
-    <div><div class="k">Speed</div><div class="v">${descent ? "-" : spd.toFixed(0) + " ft/s"}</div></div>
-    <div><div class="k">Axial accel</div><div class="v">${acc} g</div></div>
-    <div><div class="k">Tilt</div><div class="v">${tilt.toFixed(1)}°</div></div>
-    <div><div class="k">Roll rate</div><div class="v">${rr} °/s</div></div>${gpsHud(time)}`;
+    <div><div class="k">Altitude AGL</div><div class="v">${v(alt.toFixed(0), "ft")}</div></div>
+    <div><div class="k">Vertical speed</div><div class="v">${v((descent ? A!.baroVel[i] : vUp).toFixed(0), "ft/s")}</div></div>
+    <div><div class="k">Speed</div><div class="v">${descent ? "-" : v(spd.toFixed(0), "ft/s")}</div></div>
+    <div><div class="k">Axial accel</div><div class="v">${v(acc, "g")}</div></div>
+    <div><div class="k">Tilt</div><div class="v">${v(tilt.toFixed(1), "°")}</div></div>
+    <div><div class="k">Roll rate</div><div class="v">${v(rr, "°/s")}</div></div>${gpsHud(time)}`;
   $("roll-needle").setAttribute("transform", `rotate(${roll})`);
   $("roll-val").textContent = `${roll.toFixed(0)}°`;
 }
@@ -415,8 +418,8 @@ function gpsHud(time: number) {
   if (!g || !d) return "";
   const k = indexAt(g.t, time);
   return `
-    <div><div class="k">Drift (GPS)</div><div class="v">${d.distance[k].toFixed(0)} ft</div></div>
-    <div><div class="k">GPS sats</div><div class="v">${d.sats[k]}</div></div>`;
+    <div><div class="k">Drift from pad</div><div class="v">${d.distance[k].toFixed(0)}<small>ft</small></div></div>
+    <div><div class="k">GPS satellites</div><div class="v">${d.sats[k]}</div></div>`;
 }
 
 // ---------- playback ----------
@@ -424,7 +427,7 @@ function seek(time: number) {
   if (!A) return;
   t = Math.min(A.tEnd, Math.max(A.tStart, time));
   scrub.value = String(t);
-  $("time").textContent = `T${t < 0 ? "−" : "+"}${Math.abs(t).toFixed(2)} s`;
+  $("time").textContent = `T${t < 0 ? "−" : "+"}${Math.abs(t).toFixed(2)}`;
   replay.setTime(t);
   updateHud(t);
   const now = performance.now();
@@ -603,7 +606,7 @@ async function renderLibrary() {
       .join("")}</table>`;
   }
   const u = await storageUse();
-  $("lib-usage").textContent = `${list.length} saved${u ? ` · ${(u.used / 1048576).toFixed(1)} MB used of ${(u.quota / 1073741824).toFixed(1)} GB available` : ""}`;
+  $("lib-usage").textContent = `${list.length} saved${u ? `, ${(u.used / 1048576).toFixed(1)} MB used of ${(u.quota / 1073741824).toFixed(1)} GB available` : ""}`;
 }
 
 $("lib-open").addEventListener("click", async () => { await renderLibrary(); libDlg.showModal(); });

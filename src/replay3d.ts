@@ -14,7 +14,7 @@ import { EarthTerrain } from "./earth";
 export type CameraMode = "follow" | "overview" | "ground";
 
 const COLORS = {
-  bg: 0x0b0f17,
+  bg: 0x0d1524,
   ground: 0x111723,
   grid: 0x24304a,
   gridMajor: 0x34436a,
@@ -70,7 +70,7 @@ function buildRocket(): THREE.Group {
 function textSprite(text: string, color: string): THREE.Sprite {
   const c = document.createElement("canvas");
   const ctx = c.getContext("2d")!;
-  const font = "600 34px Inter, system-ui, sans-serif";
+  const font = "600 34px Barlow, system-ui, sans-serif";
   ctx.font = font;
   const w = Math.ceil(ctx.measureText(text).width) + 28;
   c.width = w; c.height = 52;
@@ -298,9 +298,12 @@ export class Replay3D {
       this.onSatellite?.(true, 0);
       earth.build(cE, cN, 16, 9, (done, total) => {
         if (this.earth !== earth) return;
-        this.earthReady = done > 0;
+        const meshes = earth.group.children.length;
+        this.earthReady = meshes > 0;
         this.applySatellite();
-        this.onSatellite?.(true, done / total);
+        // if nothing could be downloaded (offline, blocked), hide the Earth option entirely
+        if (done === total && meshes === 0) this.onSatellite?.(false, 0);
+        else this.onSatellite?.(true, done / total);
       });
     } else {
       this.onSatellite?.(false, 0);
