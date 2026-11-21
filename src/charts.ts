@@ -23,12 +23,31 @@ interface ChartDef {
 }
 
 const SYNC_KEY = "flight";
+const HIDDEN_KEY = "dc.charts.hidden";
+
+function loadHidden(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]")); } catch { return new Set(); }
+}
+function saveHidden(h: Set<string>) {
+  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...h])); } catch { /* ignore */ }
+}
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+function download(name: string, blob: Blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
 
 export class Charts {
   private plots: uPlot[] = [];
   private playhead = 0;
   private events: FlightEvent[] = [];
   private syncingScale = false;
+  private hidden = loadHidden();
+  private flightName = "flight";
   private ro: ResizeObserver;
 
   constructor(private host: HTMLElement, private onSeek: (t: number) => void) {
@@ -41,6 +60,7 @@ export class Charts {
     this.plots = [];
     this.host.innerHTML = "";
     this.events = a.events;
+    this.flightName = slug(f.gps?.name ?? f.name) || "flight";
     const lr = f.lr!;
     const hr = f.hr;
     const lift = a.events.find((e) => e.key === "liftoff")?.t ?? 0;
@@ -137,11 +157,22 @@ export class Charts {
   private make(d: ChartDef, a: Analysis): uPlot {
     const wrap = document.createElement("div");
     wrap.className = "chart";
+    const key = d.title.replace(/\s*\(.*$/, ""); // stable key even when labels change
+    if (this.hidden.has(key)) wrap.classList.add("collapsed");
     const h = document.createElement("div");
-    h.className = "chart-title";
-    h.textContent = d.title;
+    h.className = "chart-head";
+    h.innerHTML = `<button class="chart-title" aria-expanded="${!this.hidden.has(key)}"><span class="caret">▾</span>${d.title}</button>
+      <span class="chart-tools"><button class="btn small-btn" data-x="csv">CSV</button><button class="btn small-btn" data-x="png">PNG</button></span>`;
     wrap.appendChild(h);
     this.host.appendChild(wrap);
+    h.querySelector(".chart-title")!.addEventListener("click", (e) => {
+      const collapsed = wrap.classList.toggle("collapsed");
+      (e.currentTarget as HTMLElement).setAttribute("aria-expanded", String(!collapsed));
+      if (collapsed) this.hidden.add(key); else this.hidden.delete(key);
+      saveHidden(this.hidden);
+    });
+    h.querySelector('[data-x="csv"]')!.addEventListener("click", () => this.exportCsv(u, d));
+    h.querySelector('[data-x="png"]')!.addEventListener("click", () => this.exportPng(u, d));
     const self = this;
     const opts: uPlot.Options = {
       width: Math.max(300, this.host.clientWidth - 8),
@@ -213,6 +244,56 @@ export class Charts {
       ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, top + height); ctx.stroke();
     }
     ctx.restore();
+  }
+
+  private exportCsv(u: uPlot, d: ChartDef) {
+    const heads = ["Flight time (s)", ...d.series.map((s) => `${s.label} (${s.unit})`)];
+    const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const lines = [heads.map(esc).join(",")];
+    const x = u.data[0];
+    for (let i = 0; i < x.length; i++) {
+      const row = [x[i].toFixed(3)];
+      for (let k = 1; k < u.data.length; k++) {
+        const v = u.data[k][i];
+        row.push(v == null ? "" : String(Math.round(v * 1000) / 1000));
+      }
+      lines.push(row.join(","));
+    }
+    download(`${this.flightName}-${slug(d.title)}.csv`, new Blob([lines.join("\n")], { type: "text/csv" }));
+  }
+
+  private exportPng(u: uPlot, d: ChartDef) {
+    // draw once without the playhead so the image is clean
+    const keep = this.playhead;
+    this.playhead = NaN;
+    u.redraw(false, false);
+    const src = u.ctx.canvas;
+    const pad = 16 * devicePixelRatio, head = 34 * devicePixelRatio, legend = 26 * devicePixelRatio;
+    const c = document.createElement("canvas");
+    c.width = src.width + pad * 2;
+    c.height = src.height + head + legend + pad;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#131e33";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = "#e9eef7";
+    ctx.font = `600 ${16 * devicePixelRatio}px Barlow, system-ui, sans-serif`;
+    ctx.fillText(d.title, pad, pad + 14 * devicePixelRatio);
+    ctx.drawImage(src, pad, head);
+    // legend
+    ctx.font = `${12 * devicePixelRatio}px Barlow, system-ui, sans-serif`;
+    let x = pad;
+    const y = head + src.height + 16 * devicePixelRatio;
+    for (const s of d.series) {
+      ctx.fillStyle = s.color;
+      ctx.fillRect(x, y - 8 * devicePixelRatio, 14 * devicePixelRatio, 4 * devicePixelRatio);
+      x += 20 * devicePixelRatio;
+      ctx.fillStyle = "#e9eef7";
+      ctx.fillText(s.label, x, y);
+      x += ctx.measureText(s.label).width + 18 * devicePixelRatio;
+    }
+    this.playhead = keep;
+    u.redraw(false, false);
+    c.toBlob((b) => b && download(`${this.flightName}-${slug(d.title)}.png`, b), "image/png");
   }
 
   setPlayhead(t: number) {

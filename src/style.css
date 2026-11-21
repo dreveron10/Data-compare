@@ -147,7 +147,15 @@ select { background: var(--panel-2); color: var(--text); border: 1px solid var(-
 .charts-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 10px; }
 .charts-head { display: flex; align-items: baseline; gap: 12px; padding: 0 6px 6px; }
 .chart { margin-top: 10px; }
-.chart-title { font-size: 14px; font-weight: 600; color: var(--text); padding-left: 8px; }
+.chart-head { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 2px; }
+.chart-title { font: inherit; font-size: 14px; font-weight: 600; color: var(--text); background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 6px; display: flex; align-items: center; gap: 6px; }
+.chart-title:hover { background: var(--panel-2); }
+.chart-title .caret { color: var(--muted); font-size: 12px; transition: transform 0.15s; }
+.chart.collapsed .caret { transform: rotate(-90deg); }
+.chart.collapsed .uplot { display: none; }
+.chart.collapsed .chart-tools { visibility: hidden; }
+.chart-tools { display: flex; gap: 4px; opacity: 0.75; }
+.chart:hover .chart-tools, .chart-tools:focus-within { opacity: 1; }
 .uplot { font-family: inherit; color: var(--text); }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 .u-legend { font-size: 12px; text-align: left; padding-left: 50px; }
