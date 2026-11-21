@@ -1,6 +1,6 @@
 import "./style.css";
 import { analyze, flightPhases, indexAt, type Analysis } from "./analysis";
-import { CHANNELS, loadBlueRaven, type BlueRavenFlight, type Channel } from "./parsers/blueRaven";
+import { CHANNELS, loadBlueRaven, parseSettings, type BlueRavenFlight, type Channel, type DeploySettings } from "./parsers/blueRaven";
 import { Replay3D, type CameraMode } from "./replay3d";
 import { Charts } from "./charts";
 import { loadAndAnalyze } from "./background";
@@ -143,6 +143,11 @@ async function fromFileList(list: FileList | File[]) {
     } catch (e) {
       showWarnings([`${zip.name}: not a Data Compare flight file (${(e as Error).message}).`]);
     }
+    return;
+  }
+  // only a deploy settings workbook: check it before a flight, no flight data needed
+  if (files.length > 0 && files.every((f) => f.buffer && /\.xlsx$/i.test(f.name))) {
+    preflight(files[0]);
     return;
   }
   // an OpenRocket export dropped onto a loaded flight is a comparison, not a new flight
@@ -767,6 +772,31 @@ function renderSettings() {
   }</div>`;
   $("settings").innerHTML = `${check}<div class="muted small" style="margin-top:12px">All conditions must be true to fire. Green/red shows the logged state in the 0.15 s before each fire.</div>${html}`;
 }
+
+// ---------- pre-flight: settings workbook on its own ----------
+function preflight(file: InFile) {
+  let s: DeploySettings;
+  try { s = parseSettings(file.buffer!); }
+  catch (e) { showWarnings([`${file.name}: not a Blue Raven deploy settings file (${(e as Error).message}).`]); return; }
+  const issues = checkSettings(s);
+  const warns = issues.filter((i) => i.level === "warn").length;
+  const notes = issues.length - warns;
+  const parts = [warns ? `${warns} warning${warns === 1 ? "" : "s"}` : "", notes ? `${notes} note${notes === 1 ? "" : "s"}` : ""].filter(Boolean);
+  $("pre-sub").textContent = `${file.name}: ${parts.length ? `${parts.join(" and ")} to look at before flying.` : "no common setup problems found."} Nothing is uploaded; this only reads the file.`;
+  const chans = CHANNELS.map((ch: Channel) => {
+    const vals: Record<string, number> = {};
+    for (const [k, v] of Object.entries(s.values)) vals[k] = v[ch];
+    const chips = s.conditions.filter((c) => c.enabled[ch]).map((c) => `<span class="cond">${escapeHtml(COND_MAP[c.name]?.text(vals) ?? c.name)}</span>`).join("");
+    const armed = s.options["Arm_by_default"]?.[ch] === "TRUE";
+    const delay = s.options["Use_Delay"]?.[ch] === "TRUE" ? `${vals.delay} s delay` : "no delay";
+    return `<div class="settings-ch"><h3>${ch} <span class="muted small">(${armed ? "armed by default" : "not armed by default"}, ${delay})</span></h3>${chips || '<span class="muted small">no conditions</span>'}</div>`;
+  }).join("");
+  $("pre-body").innerHTML = `<div class="set-check">${
+    issues.length ? `<ul>${issues.map((i) => `<li class="${i.level}"><b>${escapeHtml(i.title)}</b><span>${escapeHtml(i.detail)}</span></li>`).join("")}</ul>` : ""
+  }</div><div class="pre-chans">${chans}</div><p class="muted small">All conditions on a channel must be true for it to fire.</p>`;
+  $<HTMLDialogElement>("pre-dialog").showModal();
+}
+$("pre-close").addEventListener("click", () => $<HTMLDialogElement>("pre-dialog").close());
 
 function renderScrubEvents() {
   const span = A!.tEnd - A!.tStart;

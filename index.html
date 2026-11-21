@@ -88,7 +88,7 @@
             <div class="wl-files">
               <h2 class="wl-h">What to bring</h2>
               <dl>
-                <dt>Blue Raven</dt><dd>The HR, LR and summary CSVs from the Featherweight app. Add the deploy settings XLSX to see why each channel fired.</dd>
+                <dt>Blue Raven</dt><dd>The HR, LR and summary CSVs from the Featherweight app. Add the deploy settings XLSX to see why each channel fired. Before a launch, drop the settings XLSX on its own to check it.</dd>
                 <dt>GPS tracker <span class="opt">optional</span></dt><dd>The Featherweight tracker CSV from the same flight adds true north, real drift and a satellite Earth view.</dd>
                 <dt>OpenRocket <span class="opt">optional</span></dt><dd>A simulation CSV export to overlay as a comparison once a flight is open.</dd>
                 <dt>Shared flight <span class="opt">optional</span></dt><dd>A .flight.zip from a teammate opens straight away and joins your library.</dd>
@@ -262,6 +262,14 @@
         <div id="charts"></div>
       </section>
     </main>
+    <dialog id="pre-dialog" class="dlg wide">
+      <div class="dlg-head">
+        <h2 class="dlg-title">Pre-flight settings check</h2>
+        <button class="btn small-btn" id="pre-close">Close</button>
+      </div>
+      <p class="muted small" id="pre-sub"></p>
+      <div class="pre-body" id="pre-body"></div>
+    </dialog>
     <dialog id="about-dialog" class="dlg wide">
       <div class="dlg-head">
         <h3>How the numbers are made</h3>

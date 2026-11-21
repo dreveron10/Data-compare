@@ -533,3 +533,8 @@ li[tabindex="0"] { cursor: pointer; }
 .tour .btn.primary { background: var(--signal); border-color: var(--signal); color: #1a0d02; }
 .tour-target { outline: 2px solid var(--signal) !important; outline-offset: 4px; border-radius: 10px; }
 .dlg-head-acts { display: flex; gap: 6px; }
+
+/* pre-flight dialog */
+.dlg-title { margin: 0; font-size: 18px; }
+.pre-body { max-height: min(68vh, 680px); overflow: auto; padding-right: 4px; }
+.pre-chans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 18px; margin-top: 10px; }
