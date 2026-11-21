@@ -860,7 +860,31 @@ async function loadVehicleKey() {
   vehicleKey = vehicleKeyOf(vehicleLabel);
   renderVehicle();
   renderDescent();
+  findPreviousFlight(e);
 }
+
+// ---------- compare with the previous flight of the same vehicle ----------
+let previousEntry: LibraryEntry | null = null;
+async function findPreviousFlight(cur?: LibraryEntry) {
+  previousEntry = null;
+  const btn = $("cmp-last");
+  btn.hidden = true;
+  if (!cur?.vehicle?.trim()) return;
+  const key = vehicleKeyOf(cur.vehicle);
+  const when = (x: LibraryEntry) => `${x.date || ""}|${x.savedAt}`;
+  const earlier = (await listEntries())
+    .filter((x) => x.kind === "flight" && x.id !== cur.id && vehicleKeyOf(x.vehicle) === key && when(x) < when(cur))
+    .sort((a, b) => when(b).localeCompare(when(a)));
+  previousEntry = earlier[0] ?? null;
+  if (!previousEntry || cmps.some((c) => c.trace.name.includes(previousEntry!.name))) return;
+  btn.textContent = `Previous ${cur.vehicle.trim()} flight: ${previousEntry.name}${previousEntry.date ? ` (${previousEntry.date})` : ""}`;
+  btn.hidden = cmps.length >= MAX_COMPARES;
+}
+$("cmp-last").addEventListener("click", async () => {
+  if (!previousEntry) return;
+  $("cmp-last").hidden = true;
+  await loadCompare(previousEntry.files);
+});
 $("coast-mass").addEventListener("change", coastInput);
 $("coast-dia").addEventListener("change", coastInput);
 
@@ -1768,6 +1792,7 @@ $("save-form").addEventListener("submit", async (e) => {
     currentEntryName = entry.name;
     showFlightTitle();
     $("save-open").textContent = "Edit saved flight";
+    loadVehicleKey(); // the vehicle name may be new or changed: switch its numbers and the previous-flight button
     requestPersistence();
     showWarnings(A.warnings);
     maybeNudgeAfterSave();
