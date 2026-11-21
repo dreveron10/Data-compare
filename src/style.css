@@ -663,3 +663,8 @@ table.chute td, table.chute th { font-size: 13px; white-space: nowrap; }
 .cmp-item label.same { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
 button.chipline { border: 1px solid transparent; font: inherit; font-size: 11px; cursor: pointer; line-height: 1.5; }
 button.chipline:hover { border-color: var(--line); color: var(--ink, inherit); }
+.events li { position: relative; }
+.events li .ev-card { display: none; position: absolute; z-index: 5; left: 30px; top: 100%; margin-top: 2px; padding: 6px 9px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 4px 14px rgb(0 0 0 / 0.3); font-size: 12px; white-space: nowrap; flex-direction: column; gap: 2px; pointer-events: none; }
+.events li .ev-card b { font-weight: 500; color: var(--muted); display: inline-block; min-width: 92px; }
+.events li:hover .ev-card, .events li:focus-visible .ev-card { display: flex; }
+@media (hover: none) { .events li:hover .ev-card { display: none; } }

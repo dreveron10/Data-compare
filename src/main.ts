@@ -1215,6 +1215,26 @@ function reanalyze() {
   }
 }
 
+/** state of the rocket at an event: altitude, vertical speed, speed along the path, tilt, load */
+function eventCard(tt: number): string {
+  const lr = flight!.lr!;
+  const i = indexAt(lr.t, tt);
+  const vu = lr.velUp[i], tilt = lr.tilt[i];
+  const speed = Number.isFinite(tilt) && tilt < 80 ? Math.abs(vu) / Math.cos((tilt * Math.PI) / 180) : null;
+  let g: number | null = null;
+  if (flight!.hr && A!.accelMag) {
+    const h = indexAt(flight!.hr.t, tt);
+    g = A!.accelMag[h];
+  }
+  const rows: [string, string][] = [
+    ["Altitude", show(A!.altSmooth[i], "ft")],
+    ["Vertical speed", show(vu, "ft/s")],
+    ...(speed !== null && vu > 0 ? [["Speed", show(speed, "ft/s")] as [string, string]] : []),
+    ["Tilt", Number.isFinite(tilt) ? `${tilt.toFixed(0)}°` : "-"],
+    ...(g !== null && Number.isFinite(g) ? [["Load", `${g.toFixed(1)} g`] as [string, string]] : []),
+  ];
+  return rows.map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("");
+}
 function renderEvents() {
   const p = A!.path;
   const ej = new Map(ejectionTimes(flight!, A!).map((x) => [x.key, x]));
@@ -1222,10 +1242,11 @@ function renderEvents() {
     .map((e, i) => {
       const alt = p.y[indexAt(p.t, e.t)];
       const x = ej.get(e.key);
+      const card = eventCard(e.t);
       const shock = x
         ? `<span class="ej${x.delay === null ? " none" : x.delay > 0.5 ? " slow" : ""}" title="Jolt: first acceleration spike after the fire (the charge separating the airframe). Biggest load: largest spike in the next 6 s, usually the parachute opening.">${x.delay === null ? "no jolt seen within 3 s" : `jolt +${x.delay.toFixed(2)} s, ${x.peakG!.toFixed(0)} g`}${x.openT !== null && x.openG! > (x.peakG ?? 0) * 1.5 ? `; biggest load ${x.openG!.toFixed(0)} g at +${x.openT.toFixed(1)} s` : ""}</span>`
         : "";
-      return `<li data-t="${e.t}" tabindex="0"><span class="num">${i < 9 ? i + 1 : ""}</span><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${show(alt, "ft")}</span><span class="t">T+${e.t.toFixed(2)} s</span>${shock}</li>`;
+      return `<li data-t="${e.t}" tabindex="0" aria-describedby="evc-${i}"><span class="num">${i < 9 ? i + 1 : ""}</span><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${show(alt, "ft")}</span><span class="t">T+${e.t.toFixed(2)} s</span>${shock}<span class="ev-card" id="evc-${i}" role="tooltip">${card}</span></li>`;
     })
     .join("");
 }
