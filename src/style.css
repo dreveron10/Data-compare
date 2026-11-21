@@ -456,3 +456,13 @@ table.wind .bar { position: absolute; left: 0; bottom: -3px; height: 3px; border
 .coast-cd { margin: 12px 0 4px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .coast-cd .big { font-family: var(--num); font-size: 30px; font-weight: 600; line-height: 1; }
 .coast-cd .lbl { color: var(--muted); font-size: 13px; }
+
+/* landing card */
+.land-card { margin-top: 12px; padding: 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); display: grid; gap: 10px; }
+.land-top { display: flex; align-items: center; gap: 12px; }
+.land-arrow { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--signal); font-weight: 700; font-size: 24px; }
+.land-dist { font-family: var(--num); font-size: 26px; font-weight: 600; line-height: 1.05; }
+.land-ll { display: flex; align-items: center; gap: 8px; }
+.land-ll code { flex: 1; min-width: 0; font-family: var(--num); font-size: 15px; letter-spacing: 0.02em; overflow-wrap: anywhere; user-select: all; }
+.land-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.land-actions a.btn { text-decoration: none; }

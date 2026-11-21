@@ -542,11 +542,58 @@ function renderGps() {
   $("compare").className = "metrics cmp";
   $("compare").innerHTML = `<tr><th>Metric</th><th>Blue Raven</th><th>GPS</th><th>Δ</th><th></th></tr>${rows.join("")}`;
   const L = g.landing;
-  const ll = `${L.lat.toFixed(5)}, ${L.lon.toFixed(5)}`;
-  $("gps-landing").innerHTML = `Landing: <b>${show(L.distance, "ft")}</b> from the pad, bearing <b>${L.bearing.toFixed(0)}°</b><br/>` +
-    `<a href="https://www.google.com/maps?q=${encodeURIComponent(ll)}" target="_blank" rel="noopener">${ll} ↗</a>`;
+  const ll = `${L.lat.toFixed(6)}, ${L.lon.toFixed(6)}`;
+  const q = `${L.lat.toFixed(6)},${L.lon.toFixed(6)}`;
+  const gp = flight.gps;
+  const land = A!.events.find((e) => e.key === "landing")?.t;
+  const apo = A!.events.find((e) => e.key === "apogee")?.t;
+  $("gps-landing").innerHTML = `
+    <div class="land-card">
+      <div class="land-top">
+        <span class="land-arrow" style="transform:rotate(${L.bearing.toFixed(0)}deg)" aria-hidden="true">↑</span>
+        <div>
+          <div class="land-dist">${show(L.distance, "ft")}</div>
+          <div class="muted small">from the pad toward ${compassName(L.bearing)} (${L.bearing.toFixed(0)}° true)${land !== undefined && apo !== undefined ? `, ${(land - apo).toFixed(0)} s under canopy` : ""}</div>
+        </div>
+      </div>
+      <div class="land-ll"><code id="land-ll">${ll}</code><button class="btn small-btn" id="land-copy" type="button">Copy</button></div>
+      <div class="land-actions">
+        <a class="btn small-btn" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">Open in Maps</a>
+        <a class="btn small-btn" href="https://www.google.com/maps/dir/?api=1&destination=${q}&travelmode=walking" target="_blank" rel="noopener">Walking directions</a>
+        <button class="btn small-btn" id="land-gpx" type="button" title="Pad and landing as waypoints, plus the flight track, for a phone GPS app">GPX</button>
+      </div>
+      <div class="muted small">Pad ${gp.padLat.toFixed(6)}, ${gp.padLon.toFixed(6)}. Landing is the GPS fix at touchdown.</div>
+    </div>`;
   $<HTMLInputElement>("gps-offset").value = g.offset.toFixed(2);
 }
+
+$("gps-landing").addEventListener("click", async (e) => {
+  const tgt = e.target as HTMLElement;
+  if (tgt.id === "land-copy") {
+    const txt = $("land-ll").textContent ?? "";
+    try { await navigator.clipboard.writeText(txt); tgt.textContent = "Copied"; }
+    catch { getSelection()?.selectAllChildren($("land-ll")); tgt.textContent = "Selected"; }
+    setTimeout(() => (tgt.textContent = "Copy"), 1500);
+  } else if (tgt.id === "land-gpx" && A?.gps && flight?.gps) {
+    const gp = flight.gps, L = A.gps.landing;
+    const esc = (x: string) => x.replace(/[<&>]/g, (c) => ({ "<": "&lt;", "&": "&amp;", ">": "&gt;" })[c]!);
+    const name = esc(currentEntryName ?? gp.name);
+    const trk: string[] = [];
+    for (let i = 0; i < gp.n; i++) {
+      if (!gp.fix[i] || !Number.isFinite(gp.lat[i]) || !Number.isFinite(gp.lon[i]) || (gp.lat[i] === 0 && gp.lon[i] === 0)) continue;
+      trk.push(`<trkpt lat="${gp.lat[i].toFixed(7)}" lon="${gp.lon[i].toFixed(7)}"><ele>${(gp.altAsl[i] * 0.3048).toFixed(1)}</ele></trkpt>`);
+    }
+    const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Data Compare" xmlns="http://www.topografix.com/GPX/1/1">
+<wpt lat="${gp.padLat.toFixed(7)}" lon="${gp.padLon.toFixed(7)}"><name>Pad</name></wpt>
+<wpt lat="${L.lat.toFixed(7)}" lon="${L.lon.toFixed(7)}"><name>Landing: ${name}</name></wpt>
+<trk><name>${name}</name><trkseg>
+${trk.join("\n")}
+</trkseg></trk>
+</gpx>`;
+    downloadBlob(`${fileSlug(currentEntryName ?? gp.name)}.gpx`, new Blob([gpx], { type: "application/gpx+xml" }));
+  }
+});
 
 function reanalyze() {
   if (!flight) return;
