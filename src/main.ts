@@ -1766,6 +1766,21 @@ async function buildReport() {
         .map((d) => `<tr><td>${e(d.name)} <span style="color:#6b7891">(${conv(d.altTop, "ft")[0].toFixed(0)} to ${show(d.altBottom, "ft")})</span></td><td class="n">${show(d.rate, "ft/s", 1)}</td><td class="n">${show(d.seaLevelRate, "ft/s", 1)}</td><td class="n">${show(d.cdA, "ft²", 1)}</td></tr>`)
         .join("")}</table></section>`
     : "";
+  const sw = canopySwing(flight, desc);
+  const swingBlock = sw.length
+    ? `<section><h2>Under canopy</h2><table><tr><th>Phase</th><th class="n">Hangs at</th><th class="n">Swing</th><th class="n">Period</th><th class="n">Spin</th></tr>${sw
+        .map((x) => x.frozen
+          ? `<tr><td>${e(x.name)}</td><td colspan="4" style="color:#6b7891">almost no motion logged</td></tr>`
+          : `<tr><td>${e(x.name)}</td><td class="n">${x.hangDeg.toFixed(0)}°</td><td class="n">± ${x.swingDeg.toFixed(0)}°</td><td class="n">${x.periodS !== null ? x.periodS.toFixed(1) + " s" : "-"}</td><td class="n">${(x.spinDps / 360).toFixed(2)} rev/s</td></tr>`)
+        .join("")}</table><p style="color:#6b7891;font-size:9pt">Angle from vertical (0° nose up). Swing is half the 10th to 90th percentile spread of tilt, from 2 s after each opening.</p></section>`
+    : "";
+  const redPairs = cmps.filter((c) => c.src && sameFlight(flight!, A!, c.src.flight, c.src.analysis));
+  const redundBlock = redPairs.map((c) => {
+    const r = redundancy(flight!, A!, c.src!.flight, c.src!.analysis);
+    return `<section><h2>Altimeter agreement: ${e(c.trace.name)}</h2><table><tr><th></th><th class="n">This unit</th><th class="n">Other unit</th><th class="n">Difference</th></tr>${r.rows
+      .map((x) => `<tr><td>${e(x.label)}</td><td class="n">${e(x.a)}</td><td class="n">${e(x.b)}</td><td class="n ${x.flag ? "fail" : ""}">${e(x.diff)}${x.flag ? " (check)" : ""}</td></tr>`).join("")}</table>
+      <p style="color:#6b7891;font-size:9pt">Same flight by the logger clocks. Baro offset is the median altitude difference, liftoff to landing, skipping 1.5 s around each pyro fire.</p></section>`;
+  }).join("");
   const notesBlock = marks.length
     ? `<section><h2>Notes on the timeline</h2><table><tr><th style="width:90px">Time</th><th>Note</th></tr>${marks
         .map((m) => `<tr><td style="white-space:nowrap">${tLabel(m.t)} s</td><td>${e(m.text)}</td></tr>`)
@@ -1822,7 +1837,9 @@ async function buildReport() {
     ${launchBlock}
     ${gpsBlock}
     <div class="cols">${descBlock}${windBlock}</div>
+    ${swingBlock}
     ${cmpBlock}
+    ${redundBlock}
     ${shot3d ? `<figure><img src="${shot3d}" alt="3D view of the trajectory" /></figure>` : ""}
     ${figs.map((f) => `<figure><img src="${f.url}" alt="${e(f.title)} chart" /></figure>`).join("")}
     <div class="foot">Generated ${new Date().toLocaleString()} by Data Compare (dreveron10.github.io/Data-compare). Baro altitude filtered with a 1 s median and 0.2 s average; descent rates are linear fits.</div>`;
