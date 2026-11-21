@@ -241,6 +241,25 @@ export class Charts {
     u.over.addEventListener("mouseup", (e) => {
       if (Math.abs(e.clientX - downX) < 4) this.onSeek(u.posToVal(e.offsetX, "x"));
     });
+    // touch: a finger on the chart moves the cursor (all charts follow through the sync key) and
+    // fills the legend; lifting it without sliding jumps the replay there. Vertical swipes still scroll.
+    let touchStartX = 0, slid = false;
+    const touchAt = (e: TouchEvent) => {
+      const r = u.over.getBoundingClientRect();
+      const x = Math.max(0, Math.min(r.width, e.touches[0].clientX - r.left));
+      const y = Math.max(0, Math.min(r.height, e.touches[0].clientY - r.top));
+      // third argument publishes to the other charts on the sync key (not in uPlot's typings)
+      (u.setCursor as (o: { left: number; top: number }, fire?: boolean, pub?: boolean) => void)({ left: x, top: y }, true, true);
+      return x;
+    };
+    u.over.addEventListener("touchstart", (e) => { if (e.touches.length !== 1) return; touchStartX = touchAt(e); slid = false; }, { passive: true });
+    u.over.addEventListener("touchmove", (e) => { if (e.touches.length !== 1) return; if (Math.abs(touchAt(e) - touchStartX) > 6) slid = true; }, { passive: true });
+    u.over.addEventListener("touchend", (e) => {
+      if (!slid && e.changedTouches.length) {
+        const r = u.over.getBoundingClientRect();
+        this.onSeek(u.posToVal(e.changedTouches[0].clientX - r.left, "x"));
+      }
+    });
     u.over.addEventListener("dblclick", () => {
       for (const p of this.plots) p.setScale("x", { min: a.tStart, max: a.tEnd });
     });
