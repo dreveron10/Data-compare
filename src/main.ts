@@ -9,6 +9,7 @@ import { conv, cu, getUnits, onUnitsChange, setUnits, show } from "./units";
 import { windProfile, compassName } from "./wind";
 import { coastDrag } from "./coast";
 import { thrustCurve } from "./thrust";
+import { calibHint } from "./calib";
 import { checkSettings } from "./settingsCheck";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
@@ -249,8 +250,19 @@ function renderCompare() {
     .join("");
   const mine = keyNumbersOf(A);
   const cname = (c: ActiveCompare) => (c.trace.kind === "sim" ? `the sim ${c.trace.name}` : c.trace.name);
+  const coastCd = (() => {
+    if (!flight?.hr || !A?.axialAccel) return null;
+    const cc = coastCfg();
+    const m = cc.massLb ?? recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
+    return coastDrag(flight, A, m, cc.diaIn)?.cd50 ?? null;
+  })();
   $("cmp-summary").innerHTML = cmps
-    .map((c) => `<p><i class="sw" style="background:${c.color}"></i>${escapeHtml(whatChanged(mine, c.trace.key, cname(c)))}</p>`)
+    .map((c) => {
+      const hint = c.trace.kind === "sim" ? calibHint(flight!, A!, c.trace, coastCd) : null;
+      return `<p><i class="sw" style="background:${c.color}"></i>${escapeHtml(whatChanged(mine, c.trace.key, cname(c)))}</p>${
+        hint ? `<details class="calib"><summary>How to make this sim match</summary>${hint.lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("")}<div class="calib-bar" title="Apogee gap split"><span class="b" style="flex:${Math.abs(hint.fromBoost).toFixed(0)}">Boost ${Math.abs(hint.fromBoost).toFixed(0)} ft</span><span class="c" style="flex:${Math.abs(hint.fromCoast).toFixed(0)}">Coast ${Math.abs(hint.fromCoast).toFixed(0)} ft</span></div></details>` : ""
+      }`;
+    })
     .join("");
   const single = cmps.length === 1;
   const rows = KEY_ROWS.map(({ k, label, unit }) => {
