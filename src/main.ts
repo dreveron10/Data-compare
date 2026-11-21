@@ -35,6 +35,7 @@ import { isGenericAlt, parseGenericAlt } from "./parsers/genericAlt";
 import { isGpsLog, isGpsSummary, parseGpsLog } from "./parsers/featherweightGps";
 import { gpsOnlyHtml } from "./gpsOnly";
 import { gFromMaterial, parseOrk } from "./parsers/ork";
+import { canopySwing } from "./swing";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
@@ -479,6 +480,7 @@ function renderDescent() {
         .map((p) => `<tr title="${p.altTop.toFixed(0)} to ${p.altBottom.toFixed(0)} ft, T+${p.t0.toFixed(1)} to ${p.t1.toFixed(1)} s"><td>${p.name}<small class="muted" style="display:block">${conv(p.altTop, "ft")[0].toFixed(0)} to ${show(p.altBottom, "ft")}</small></td><td>${show(p.rate, "ft/s", 1)}</td><td>${show(p.seaLevelRate, "ft/s", 1)}</td><td>${show(p.cdA, "ft²", 1)}</td></tr>`)
         .join("")}`
     : '<tr><td class="muted">No steady descent found.</td></tr>';
+  renderSwing(phases);
   renderWind();
   renderWhatIf();
   renderChute(phases, weight);
@@ -502,6 +504,27 @@ function renderDescent() {
     ],
     series: [{}, { stroke: "#6cc4ff", width: 1.5, points: { show: false } }],
   }, [x.map((v) => conv(v, "ft")[0]), y.map((v) => conv(v, "ft/s")[0])], host);
+}
+
+// ---------- motion under canopy ----------
+function renderSwing(phases: ReturnType<typeof descentPhases>) {
+  const sw = flight ? canopySwing(flight, phases) : [];
+  $("swing").hidden = sw.length === 0;
+  if (!sw.length) return;
+  const live = sw.filter((s) => !s.frozen);
+  $("swing-table").innerHTML = `<tr><th>Phase</th><th>Hangs at</th><th>Swing</th><th>Period</th><th>Spin</th></tr>${sw
+    .map((s) => s.frozen
+      ? `<tr><td>${escapeHtml(s.name)}</td><td colspan="4" class="muted">almost no motion logged</td></tr>`
+      : `<tr><td>${escapeHtml(s.name)}</td><td>${s.hangDeg.toFixed(0)}°</td><td>± ${s.swingDeg.toFixed(0)}°</td><td>${s.periodS !== null ? `${s.periodS.toFixed(1)} s` : "-"}</td><td>${(s.spinDps / 360).toFixed(2)} rev/s</td></tr>`)
+    .join("")}`;
+  const notes: string[] = [];
+  for (const s of live) {
+    if (s.spinDps > 180) notes.push(`${s.name}: spinning about ${(s.spinDps / 360).toFixed(1)} rev/s. A swivel between the riser and the chute keeps that from twisting the shroud lines.`);
+    if (s.swingDeg > 20) notes.push(`${s.name}: swinging ± ${s.swingDeg.toFixed(0)}°. Large swings usually mean an off-center riser attachment or a chute with no spill hole.`);
+  }
+  if (sw.some((s) => s.frozen)) notes.push("Almost no motion logged means the gyro and tilt barely changed for the whole phase. Either it hung unusually still or the attitude stopped updating, so check the raw high-rate log before reading anything into it.");
+  notes.push("Hang angle is from vertical (0° nose up, 180° nose down). Swing is half the spread between the 10th and 90th percentile of tilt, from 2 s after each opening.");
+  $("swing-notes").innerHTML = notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
 }
 
 // ---------- landing what-if ----------
