@@ -69,16 +69,29 @@
 
         <div class="loading" id="loading" hidden role="status"><span class="spinner"></span><span id="loading-msg">Loading</span></div>
         <div class="dropzone" id="dropzone">
-          <div class="dz-card">
-            <div class="dz-icon">⇪</div>
-            <h2>Drop your Blue Raven files here</h2>
-            <p>Select the <b>HR</b>, <b>LR</b> and <b>summary</b> CSVs together. The <b>deploy settings</b> XLSX is optional.</p>
-            <p>Got a <b>.flight.zip</b> from a teammate? Drop it here to open it and add it to your library.</p>
-            <p>Add the <b>Featherweight GPS tracker</b> CSV (and its summary) from the same flight to get true north and the real descent drift.</p>
-            <p class="muted">Everything is processed in your browser. Nothing is uploaded.</p>
-            <div class="dz-actions">
-              <label class="btn primary">Choose files<input id="file-input-2" type="file" multiple accept=".csv,.xlsx,.kml,.zip" hidden /></label>
-              <button class="btn" data-sample="SN0614">Load sample flight</button>
+          <div class="drop-hint">Drop flight files to open them, or an OpenRocket CSV to compare</div>
+          <div class="welcome">
+            <div class="wl-main">
+              <h1 class="wl-title">See exactly what your rocket did.</h1>
+              <p class="wl-lead">Drop in your altimeter logs to replay the flight in 3D, check recovery against your limits, and compare it with sims and past flights.</p>
+              <div class="dz-actions">
+                <label class="btn primary">Open flight files<input id="file-input-2" type="file" multiple accept=".csv,.xlsx,.kml,.zip" hidden /></label>
+                <button class="btn" data-sample="SN0614">Try a real flight</button>
+              </div>
+              <p class="muted small">Or drag files anywhere on this page. Everything stays in your browser; nothing is uploaded.</p>
+              <div class="wl-recent" id="wl-recent" hidden>
+                <h3>Recent in your library</h3>
+                <ul id="wl-recent-list"></ul>
+              </div>
+            </div>
+            <div class="wl-files">
+              <h3>What to bring</h3>
+              <dl>
+                <dt>Blue Raven</dt><dd>The HR, LR and summary CSVs from the Featherweight app. Add the deploy settings XLSX to see why each channel fired.</dd>
+                <dt>GPS tracker <span class="opt">optional</span></dt><dd>The Featherweight tracker CSV from the same flight adds true north, real drift and a satellite Earth view.</dd>
+                <dt>OpenRocket <span class="opt">optional</span></dt><dd>A simulation CSV export to overlay as a comparison once a flight is open.</dd>
+                <dt>Shared flight <span class="opt">optional</span></dt><dd>A .flight.zip from a teammate opens straight away and joins your library.</dd>
+              </dl>
             </div>
           </div>
         </div>

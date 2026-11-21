@@ -1156,6 +1156,26 @@ $("lib-export").addEventListener("click", async () => {
   });
 }
 
+// ---------- first visit: recent library flights ----------
+async function renderRecent() {
+  try {
+    const list = (await listEntries()).filter((e) => e.kind === "flight").slice(0, 4);
+    $("wl-recent").hidden = list.length === 0;
+    $("wl-recent-list").innerHTML = list
+      .map((e) => `<li><button data-recent="${e.id}">${escapeHtml(e.name)}<span>${escapeHtml(e.date || "")}${e.stats.apogee ? `, ${show(e.stats.apogee, "ft")}` : ""}</span></button></li>`)
+      .join("");
+  } catch { /* library unavailable */ }
+}
+$("wl-recent-list").addEventListener("click", async (ev) => {
+  const b = (ev.target as HTMLElement).closest("[data-recent]") as HTMLElement | null;
+  if (!b) return;
+  const entry = await getEntry(b.dataset.recent!);
+  if (!entry) return;
+  recovery = entry.recovery ?? loadDefaultRecovery();
+  await loadFiles(entry.files, entry.id, entry.name);
+});
+renderRecent();
+
 // open a sample straight from the URL, e.g. ?sample=SN0614
 const qs = new URLSearchParams(location.search).get("sample");
 if (qs && /^SN\d+$/.test(qs)) loadSample(qs);
