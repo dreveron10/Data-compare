@@ -11,6 +11,7 @@ import { coastDrag } from "./coast";
 import { thrustCurve } from "./thrust";
 import { calibHint } from "./calib";
 import { startTour, tourSeen } from "./tour";
+import { getVehicle, setVehicle, vehicleKeyOf } from "./vehicle";
 import { checkSettings } from "./settingsCheck";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
@@ -347,6 +348,7 @@ function showFlight() {
   renderSettings();
   renderScrubEvents();
   loadMarks();
+  loadVehicleKey();
   // first flight ever on this browser: a short walk through the main controls
   if (!tourSeen()) setTimeout(() => { if (!document.querySelector("dialog[open]")) startTour(); }, 900);
   pause();
@@ -431,9 +433,12 @@ const SETTLE_HINT = "The first 4 s after each deployment are skipped while the c
 // ---------- coast drag ----------
 let coastPlot: uPlot | null = null;
 type CoastCfg = { massLb: number | null; diaIn: number };
+// the vehicle these numbers belong to: the saved flight's vehicle name, or this browser's default
+let vehicleKey = "default";
+let vehicleLabel = "";
 function coastCfg(): CoastCfg {
-  try { const c = JSON.parse(localStorage.getItem("dc.coast") ?? "null"); if (c && typeof c.diaIn === "number") return c; } catch { /* ignore */ }
-  return { massLb: null, diaIn: 6 };
+  const v = getVehicle(vehicleKey);
+  return { massLb: v.burnoutLb, diaIn: v.diaIn };
 }
 function renderCoast(rebuildInputs = true) {
   const ok = !!(A && flight?.hr && A.axialAccel);
@@ -477,8 +482,8 @@ function renderCoast(rebuildInputs = true) {
 let motorPlot: uPlot | null = null;
 type MotorCfg = { propLb: number | null; ratedNs: number | null };
 function motorCfg(): MotorCfg {
-  try { const c = JSON.parse(localStorage.getItem("dc.motor") ?? "null"); if (c) return c; } catch { /* ignore */ }
-  return { propLb: null, ratedNs: null };
+  const v = getVehicle(vehicleKey);
+  return { propLb: v.propLb, ratedNs: v.ratedNs };
 }
 function renderMotor(rebuildInputs = true) {
   const ok = !!(A && flight?.hr && A.axialAccel);
@@ -525,7 +530,8 @@ function motorInput() {
   const r = parseFloat($<HTMLInputElement>("motor-rated").value);
   mc.propLb = Number.isFinite(p) && p >= 0 ? p / conv(1, "lb")[0] : null;
   mc.ratedNs = Number.isFinite(r) && r > 0 ? r : null;
-  try { localStorage.setItem("dc.motor", JSON.stringify(mc)); } catch { /* ignore */ }
+  setVehicle(vehicleKey, { ...getVehicle(vehicleKey), propLb: mc.propLb, ratedNs: mc.ratedNs });
+  renderVehicle();
   renderMotor(false);
 }
 $("motor-prop").addEventListener("change", motorInput);
@@ -537,9 +543,56 @@ function coastInput() {
   const dia = parseFloat($<HTMLInputElement>("coast-dia").value);
   if (Number.isFinite(m) && m > 0) cfg.massLb = m / conv(1, "lb")[0];
   if (Number.isFinite(dia) && dia > 0) cfg.diaIn = dia / conv(1, "in")[0];
-  try { localStorage.setItem("dc.coast", JSON.stringify(cfg)); } catch { /* ignore */ }
+  setVehicle(vehicleKey, { ...getVehicle(vehicleKey), burnoutLb: cfg.massLb, diaIn: cfg.diaIn });
   renderCoast(false);
   renderMotor(false);
+  renderVehicle();
+}
+
+// ---------- vehicle card ----------
+const vIn = (id: string) => $<HTMLInputElement>(id);
+function renderVehicle() {
+  $("veh-panel").hidden = !A;
+  if (!A) return;
+  const v = getVehicle(vehicleKey);
+  const lb = (x: number | null) => (x === null ? "" : conv(x, "lb")[0].toFixed(2));
+  if (!document.activeElement?.closest("#veh-panel")) {
+    vIn("veh-burnout").value = lb(v.burnoutLb);
+    vIn("veh-prop").value = lb(v.propLb);
+    vIn("veh-dia").value = conv(v.diaIn, "in")[0].toFixed(2);
+    vIn("veh-rated").value = v.ratedNs === null ? "" : String(v.ratedNs);
+  }
+  for (const [id, label] of [["veh-burnout", `Burnout mass (${cu("lb")})`], ["veh-prop", `Propellant (${cu("lb")})`], ["veh-dia", `Body diameter (${cu("in")})`]] as const)
+    $(id).parentElement!.firstChild!.textContent = label;
+  const sections = recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
+  const notes: string[] = [];
+  if (v.burnoutLb !== null) notes.push(`Liftoff mass ${show(v.burnoutLb + (v.propLb ?? 0), "lb", 1)}.`);
+  if (v.burnoutLb !== null && sections > 0 && Math.abs(sections - v.burnoutLb) / v.burnoutLb > 0.1)
+    notes.push(`The recovery sections add up to ${show(sections, "lb", 1)}, ${sections > v.burnoutLb ? "more" : "less"} than the burnout mass; one of them is probably out of date.`);
+  if (v.burnoutLb === null) notes.push("Coast drag and Motor use the recovery section total until you enter a burnout mass.");
+  $("veh-sub").textContent = `${vehicleLabel ? `Saved for ${vehicleLabel}.` : "Saved in this browser for flights without a vehicle name."} Coast drag and Motor read these numbers.`;
+  $("veh-notes").textContent = notes.join(" ");
+}
+function vehicleInput() {
+  const v = getVehicle(vehicleKey);
+  const num = (id: string) => { const x = parseFloat(vIn(id).value); return Number.isFinite(x) && x >= 0 ? x : null; };
+  const b = num("veh-burnout"), pr = num("veh-prop"), d = num("veh-dia"), r = num("veh-rated");
+  v.burnoutLb = b !== null && b > 0 ? b / conv(1, "lb")[0] : null;
+  v.propLb = pr !== null ? pr / conv(1, "lb")[0] : null;
+  if (d !== null && d > 0) v.diaIn = d / conv(1, "in")[0];
+  v.ratedNs = r !== null && r > 0 ? r : null;
+  setVehicle(vehicleKey, v);
+  renderVehicle();
+  renderCoast();
+  renderMotor();
+}
+for (const id of ["veh-burnout", "veh-prop", "veh-dia", "veh-rated"]) $(id).addEventListener("change", vehicleInput);
+async function loadVehicleKey() {
+  const e = currentEntryId ? await getEntry(currentEntryId) : undefined;
+  vehicleLabel = e?.vehicle?.trim() ?? "";
+  vehicleKey = vehicleKeyOf(vehicleLabel);
+  renderVehicle();
+  renderDescent();
 }
 $("coast-mass").addEventListener("change", coastInput);
 $("coast-dia").addEventListener("change", coastInput);
@@ -595,6 +648,7 @@ function renderRecovery() {
 async function recoveryChanged() {
   renderRecoveryTableOnly();
   renderDescent();
+  renderVehicle();
   if (currentEntryId) {
     const e = await getEntry(currentEntryId);
     if (e) await putEntry({ ...e, recovery });
@@ -1250,6 +1304,7 @@ onUnitsChange(() => {
   renderMetrics();
   renderRecovery();
   renderDescent();
+  renderVehicle();
   renderGps();
   renderEvents();
   renderSettings();

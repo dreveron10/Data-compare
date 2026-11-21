@@ -538,3 +538,4 @@ li[tabindex="0"] { cursor: pointer; }
 .dlg-title { margin: 0; font-size: 18px; }
 .pre-body { max-height: min(68vh, 680px); overflow: auto; padding-right: 4px; }
 .pre-chans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 18px; margin-top: 10px; }
+.veh-notes { margin-top: 8px; }
