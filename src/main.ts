@@ -39,6 +39,7 @@ import { canopySwing } from "./swing";
 import { redundancy, sameFlight } from "./redundancy";
 import { buildKml } from "./kml";
 import { toCsv } from "./csv";
+import { deployStrip } from "./deployStrip";
 import { statChanges } from "./libraryStats";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
@@ -352,6 +353,7 @@ function renderCompare() {
     $("cmp-notes").textContent = "";
     $("cmp-summary").innerHTML = "";
     $("cmp-redund").innerHTML = "";
+    $("cmp-strip").hidden = true;
     $("cmp-sub").textContent = "Overlay up to 3 OpenRocket sims or other Blue Raven flights. They are aligned at liftoff.";
     $("cmp-align").hidden = true;
     return;
@@ -378,6 +380,9 @@ function renderCompare() {
     return coastDrag(flight, A, m, cc.diaIn)?.cd50 ?? null;
   })();
   renderRedundancy();
+  const brs = cmps.filter((c) => c.src);
+  $("cmp-strip").hidden = brs.length === 0;
+  $("cmp-strip-svg").innerHTML = brs.length ? deployStrip([{ name: "This flight", color: "var(--text)", a: A }, ...brs.map((c) => ({ name: c.trace.name, color: c.color, a: c.src!.analysis }))]) : "";
   $("cmp-summary").innerHTML = cmps
     .map((c) => {
       const hint = c.trace.kind === "sim" ? calibHint(flight!, A!, c.trace, coastCd) : null;
