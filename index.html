@@ -2,12 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="theme-color" content="#0d1524" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Data Compare: flight analyzer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M16 2 L21 14 L21 24 L11 24 L11 14 Z' fill='%235cc8ff'/><path d='M11 18 L6 26 L11 24 Z M21 18 L26 26 L21 24 Z' fill='%23ff4d6d'/></svg>" />
+    <script>try{if(localStorage.getItem("dc.theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}</script>
   </head>
   <body>
     <header class="topbar">
@@ -20,6 +22,7 @@
       </div>
       <div class="top-actions">
         <div class="seg" role="group" aria-label="Units"><button data-units="imperial">ft</button><button data-units="metric">m</button></div>
+        <button class="btn icon sm theme-btn" id="theme-btn" type="button" aria-label="Switch to light theme">☀</button>
         <button class="btn" id="lib-open">Library</button>
         <button class="btn" id="save-open" hidden>Save flight</button>
         <button class="btn" id="report-open" hidden>Print report</button>

@@ -16,6 +16,7 @@ import { buildExport } from "./exportAll";
 import { diameterFor, diameterFromCdA } from "./chute";
 import { predictLanding } from "./predict";
 import { Recorder, pickMime } from "./record";
+import { applyTheme, axisColor, getTheme, gridColor, onThemeChange, setTheme } from "./theme";
 import { vMaxFor } from "./recovery";
 import { startTour, tourSeen } from "./tour";
 import { getVehicle, setVehicle, vehicleKeyOf, vehicleNames } from "./vehicle";
@@ -471,8 +472,8 @@ function renderDescent() {
     cursor: { y: false },
     scales: { x: { time: false } },
     axes: [
-      { stroke: "#8d9bb8", label: "Altitude AGL (ft)", labelSize: 20, size: 34, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
-      { stroke: "#8d9bb8", label: `Descent rate (${cu("ft/s")})`, labelSize: 20, size: 44, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: axisColor(), label: "Altitude AGL (ft)", labelSize: 20, size: 34, grid: { stroke: gridColor(), width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: axisColor(), label: `Descent rate (${cu("ft/s")})`, labelSize: 20, size: 44, grid: { stroke: gridColor(), width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
     ],
     series: [{}, { stroke: "#6cc4ff", width: 1.5, points: { show: false } }],
   }, [x.map((v) => conv(v, "ft")[0]), y.map((v) => conv(v, "ft/s")[0])], host);
@@ -623,8 +624,8 @@ function renderCoast(rebuildInputs = true) {
     cursor: { y: false },
     scales: { x: { time: false } },
     axes: [
-      { stroke: "#8d9bb8", label: "Mach", labelSize: 20, size: 34, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
-      { stroke: "#8d9bb8", label: "Cd", labelSize: 20, size: 40, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: axisColor(), label: "Mach", labelSize: 20, size: 34, grid: { stroke: gridColor(), width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: axisColor(), label: "Cd", labelSize: 20, size: 40, grid: { stroke: gridColor(), width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
     ],
     series: [{}, { stroke: "#f5c26b", width: 0, points: { show: true, size: 3, fill: "#f5c26b", stroke: "#f5c26b" }, paths: () => null }],
   }, [order.map((i) => d.mach[i]), order.map((i) => d.cd[i])], host);
@@ -671,8 +672,8 @@ function renderMotor(rebuildInputs = true) {
   motorPlot = new uPlot({
     width: Math.max(220, host.clientWidth || 320), height: 160, legend: { show: false }, cursor: { y: false }, scales: { x: { time: false } },
     axes: [
-      { stroke: "#8d9bb8", label: "Flight time (s)", labelSize: 20, size: 34, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
-      { stroke: "#8d9bb8", label: `Thrust (${getUnits() === "imperial" ? "lbf" : "N"})`, labelSize: 20, size: 48, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: axisColor(), label: "Flight time (s)", labelSize: 20, size: 34, grid: { stroke: gridColor(), width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: axisColor(), label: `Thrust (${getUnits() === "imperial" ? "lbf" : "N"})`, labelSize: 20, size: 48, grid: { stroke: gridColor(), width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
     ],
     series: [{}, { stroke: "#ff7a1a", width: 1.5, fill: "rgba(255,122,26,0.12)", points: { show: false } },
       ...thrustCmps.map((c) => ({ stroke: c.color, width: 1.5, dash: [6, 4], points: { show: false } }))],
@@ -1518,7 +1519,19 @@ function renderUnitsToggle() {
 document.querySelectorAll<HTMLButtonElement>("[data-units]").forEach((b) =>
   b.addEventListener("click", () => setUnits(b.dataset.units as "imperial" | "metric")),
 );
-onUnitsChange(() => {
+applyTheme();
+function renderThemeBtn() {
+  const light = getTheme() === "light";
+  const b = $("theme-btn");
+  b.textContent = light ? "☾" : "☀";
+  b.setAttribute("aria-label", light ? "Switch to dark theme" : "Switch to light theme");
+  b.title = light ? "Dark theme" : "Light theme (for projectors and printed slides)";
+}
+renderThemeBtn();
+$("theme-btn").addEventListener("click", () => setTheme(getTheme() === "light" ? "dark" : "light"));
+onThemeChange(() => { renderThemeBtn(); rerenderForDisplay(); });
+onUnitsChange(() => rerenderForDisplay());
+function rerenderForDisplay() {
   renderUnitsToggle();
   if (!A || !flight) return;
   charts.setFlight(A, flight, cmps);
@@ -1533,7 +1546,7 @@ onUnitsChange(() => {
   renderCompare();
   updateHud(t);
   charts.setPlayhead(t);
-});
+}
 renderUnitsToggle();
 
 // ---------- printable report ----------
@@ -1859,8 +1872,8 @@ async function renderTrends() {
     height: 240,
     scales: { x: { time: true, range: (_u, mn, mx) => [mn - pad, mx + pad] } },
     axes: [
-      { stroke: "#8d9bb8", grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "12px Barlow, system-ui" },
-      { stroke: "#8d9bb8", grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, label: cu(unit), labelSize: 20, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
+      { stroke: axisColor(), grid: { stroke: gridColor(), width: 1 }, font: "12px Barlow, system-ui" },
+      { stroke: axisColor(), grid: { stroke: gridColor(), width: 1 }, label: cu(unit), labelSize: 20, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
     ],
     series: [
       { label: "Date" },

@@ -8,6 +8,7 @@ import type { BlueRavenFlight } from "./parsers/blueRaven";
 import { sampleAt, type ActiveCompare } from "./compare";
 import { cu, cv } from "./units";
 import { aeroSeries } from "./aero";
+import { axisColor, gridColor, ink, tickColor } from "./theme";
 
 /** resample a comparison series onto x (flight time), aligned at liftoff plus the comparison's offset */
 function onBase(x: ArrayLike<number>, lift: number, t: ArrayLike<number>, y: ArrayLike<number>) {
@@ -205,17 +206,17 @@ export class Charts {
       legend: { live: true },
       scales: { x: { time: false, min: a.tStart, max: a.tEnd }, y: { auto: true }, ...(d.y2Label ? { y2: { auto: true } } : {}) },
       axes: [
-        { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: "Flight time (s)", labelSize: 22, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
-        { stroke: "#8a96b0", grid: { stroke: "rgba(52,67,106,0.5)", width: 1 }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: cu(d.yLabel), labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
+        { stroke: axisColor(), grid: { stroke: gridColor(), width: 1 }, ticks: { stroke: tickColor() }, label: "Flight time (s)", labelSize: 22, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
+        { stroke: axisColor(), grid: { stroke: gridColor(), width: 1 }, ticks: { stroke: tickColor() }, label: cu(d.yLabel), labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
         // every chart reserves a right axis so the time axes line up across charts
         d.y2Label
-          ? { scale: "y2", side: 1, stroke: "#8a96b0", grid: { show: false }, ticks: { stroke: "rgba(52,67,106,0.8)" }, label: cu(d.y2Label), labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" }
+          ? { scale: "y2", side: 1, stroke: axisColor(), grid: { show: false }, ticks: { stroke: tickColor() }, label: cu(d.y2Label), labelSize: 22, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" }
           : { scale: "y", side: 1, grid: { show: false }, ticks: { show: false }, values: () => [], size: 78 },
       ],
       series: [
         { label: "t", value: (_u, v) => (v == null ? "-" : `${v.toFixed(2)} s`) },
         ...d.series.map((s) => ({
-          label: s.label, stroke: s.color, width: s.width ?? 1.5, dash: s.dash, points: { show: false }, scale: s.scale ?? "y",
+          label: s.label, stroke: ink(s.color), width: s.width ?? 1.5, dash: s.dash, points: { show: false }, scale: s.scale ?? "y",
           value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(Math.abs(v) < 20 ? 2 : 0)} ${cu(s.unit)}`),
         })),
       ],

@@ -568,3 +568,33 @@ table.chute td, table.chute th { font-size: 13px; white-space: nowrap; }
 .rec-btn { color: #ff6b6b; font-size: 13px; }
 .rec-btn.on { background: #ff6b6b; color: #1a0d02; border-color: #ff6b6b; animation: recpulse 1s ease-in-out infinite alternate; }
 @keyframes recpulse { from { opacity: 1; } to { opacity: 0.6; } }
+
+/* ---------- light theme (projectors, printed slides). The 3D view stays dark. ---------- */
+:root[data-theme="light"] {
+  --bg: #eef2f8; --panel: #ffffff; --panel-2: #f1f4f9; --line: #d3dae6;
+  --text: #14213b; --muted: #5b6884; --accent: #1c78bd; --signal: #e0620b;
+  --good: #2f8a45; --warn: #a86b12; --bad: #c23a52;
+}
+[data-theme="light"] #app:not(.empty) .stage {
+  --panel: #131e33; --panel-2: #1a2842; --line: #263656; --text: #e9eef7; --muted: #8d9bb8; --accent: #6cc4ff; --signal: #ff7a1a;
+  color: var(--text);
+}
+[data-theme="light"] .topbar { background: #ffffff; }
+[data-theme="light"] .btn:hover { border-color: #a9b6cc; }
+[data-theme="light"] .methods p, [data-theme="light"] .cmp-summary p, [data-theme="light"] .set-check li span,
+[data-theme="light"] .calib p, [data-theme="light"] .wl-lead { color: var(--text); }
+[data-theme="light"] .metrics td, [data-theme="light"] .lib-table td { border-color: #e3e8f1; }
+[data-theme="light"] .findings li[data-t]:hover { background: #e8eef8; }
+[data-theme="light"] .marks .mt { color: #a07a00; }
+[data-theme="light"] .marks li.near { outline-color: #c79a00; }
+[data-theme="light"] .scrub-marks span { background: #d4a200; }
+[data-theme="light"] .align-seg button.active { color: #ffffff; }
+[data-theme="light"] .dlg::backdrop { background: rgba(20, 30, 50, 0.35); }
+[data-theme="light"] .events li .ej.slow { color: var(--warn); }
+[data-theme="light"] .loading { background: rgba(238, 242, 248, 0.82); }
+[data-theme="light"] .drop-hint { background: rgba(255, 255, 255, 0.92); }
+[data-theme="light"] .scrub input[type="range"]::-webkit-slider-runnable-track { background: rgba(20, 33, 59, 0.12); }
+[data-theme="light"] .scrub input[type="range"]::-webkit-slider-thumb { background: #ffffff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.8); }
+[data-theme="light"] .toast, [data-theme="light"] .keys-pop { box-shadow: 0 14px 40px rgba(20, 33, 59, 0.2); }
+[data-theme="light"] .u-legend { color: var(--text); }
+.theme-btn { font-size: 14px; }
