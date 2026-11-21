@@ -553,3 +553,9 @@ li[tabindex="0"] { cursor: pointer; }
 @media (max-width: 640px) { .pre-card-in { grid-template-columns: 1fr; } }
 @media print { #report td.chk { width: 26px; text-align: center; font-size: 13pt; } }
 #export-all { margin-left: auto; }
+
+/* backup reminder */
+.backup-nudge { margin: 6px 0 8px; padding: 8px 12px; border-radius: 10px; background: rgba(245, 194, 107, 0.12); border: 1px solid rgba(245, 194, 107, 0.45); font-size: 13px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.backup-nudge .btn { margin-left: auto; }
+.toast { position: fixed; z-index: 55; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; max-width: min(640px, calc(100vw - 24px)); padding: 10px 14px; border-radius: 12px; background: var(--panel-2); border: 1px solid #f5c26b; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); font-size: 13.5px; }
+.toast span { flex: 1; min-width: 200px; }

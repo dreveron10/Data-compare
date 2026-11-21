@@ -275,6 +275,11 @@
         <div id="charts"></div>
       </section>
     </main>
+    <div class="toast" id="backup-toast" role="status" hidden>
+      <span id="backup-toast-text"></span>
+      <button class="btn small-btn primary" id="backup-now" type="button">Export backup</button>
+      <button class="btn small-btn" id="backup-later" type="button">Later</button>
+    </div>
     <dialog id="pre-dialog" class="dlg wide">
       <div class="dlg-head">
         <h2 class="dlg-title">Pre-flight settings check</h2>
@@ -359,6 +364,7 @@
         <button class="btn small-btn" id="lib-close">Close</button>
       </div>
       <p class="muted small">Flights saved in this browser. Export a backup now and then: clearing browser data deletes the library.</p>
+      <div class="backup-nudge" id="lib-nudge" hidden></div>
       <div class="seg lib-view" role="tablist" aria-label="Library view">
         <button data-libview="list" class="active" role="tab">Flights</button>
         <button data-libview="trends" role="tab">Trends</button>
