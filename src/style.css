@@ -547,3 +547,8 @@ li[tabindex="0"] { cursor: pointer; }
 
 /* offline badge */
 .offline-badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #f5c26b; color: #1a0d02; vertical-align: middle; }
+
+.pre-card-in { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 6px; }
+.pre-card-in .fld { margin-top: 4px; min-width: 0; }
+@media (max-width: 640px) { .pre-card-in { grid-template-columns: 1fr; } }
+@media print { #report td.chk { width: 26px; text-align: center; font-size: 13pt; } }

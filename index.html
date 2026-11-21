@@ -277,9 +277,15 @@
     <dialog id="pre-dialog" class="dlg wide">
       <div class="dlg-head">
         <h2 class="dlg-title">Pre-flight settings check</h2>
-        <button class="btn small-btn" id="pre-close">Close</button>
+        <span class="dlg-head-acts"><button class="btn small-btn primary" id="pre-print" type="button">Print pad card</button><button class="btn small-btn" id="pre-close">Close</button></span>
       </div>
       <p class="muted small" id="pre-sub"></p>
+      <div class="pre-card-in">
+        <label class="fld sm">Vehicle<input id="pre-vehicle" list="pre-vehicles" placeholder="name as saved in the library" /></label>
+        <datalist id="pre-vehicles"></datalist>
+        <label class="fld sm">Motor<input id="pre-motor" placeholder="e.g. L1150" /></label>
+        <label class="fld sm">Expected apogee (ft)<input id="pre-apogee" type="number" min="0" inputmode="decimal" placeholder="from OpenRocket" /></label>
+      </div>
       <div class="pre-body" id="pre-body"></div>
     </dialog>
     <dialog id="about-dialog" class="dlg wide">

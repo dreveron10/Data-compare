@@ -13,7 +13,7 @@ import { calibHint } from "./calib";
 import { ejectionTimes } from "./ejection";
 import { aeroSeries } from "./aero";
 import { startTour, tourSeen } from "./tour";
-import { getVehicle, setVehicle, vehicleKeyOf } from "./vehicle";
+import { getVehicle, setVehicle, vehicleKeyOf, vehicleNames } from "./vehicle";
 import { checkSettings } from "./settingsCheck";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
@@ -888,10 +888,13 @@ function renderSettings() {
 }
 
 // ---------- pre-flight: settings workbook on its own ----------
+let preState: { s: DeploySettings; name: string } | null = null;
 function preflight(file: InFile) {
   let s: DeploySettings;
   try { s = parseSettings(file.buffer!); }
   catch (e) { showWarnings([`${file.name}: not a Blue Raven deploy settings file (${(e as Error).message}).`]); return; }
+  preState = { s, name: file.name };
+  $("pre-vehicles").innerHTML = vehicleNames().map((n) => `<option value="${escapeHtml(n)}"></option>`).join("");
   const issues = checkSettings(s);
   const warns = issues.filter((i) => i.level === "warn").length;
   const notes = issues.length - warns;
@@ -911,6 +914,48 @@ function preflight(file: InFile) {
   $<HTMLDialogElement>("pre-dialog").showModal();
 }
 $("pre-close").addEventListener("click", () => $<HTMLDialogElement>("pre-dialog").close());
+$("pre-print").addEventListener("click", () => {
+  if (!preState) return;
+  const { s, name } = preState;
+  const e = escapeHtml;
+  const vname = $<HTMLInputElement>("pre-vehicle").value.trim();
+  const motor = $<HTMLInputElement>("pre-motor").value.trim();
+  const apo = parseFloat($<HTMLInputElement>("pre-apogee").value);
+  const v = getVehicle(vehicleKeyOf(vname));
+  const lbs = (x: number | null) => (x === null ? "________" : `${x.toFixed(2)} lb`);
+  const issues = checkSettings(s);
+  const chans = CHANNELS.map((ch: Channel) => {
+    const vals: Record<string, number> = {};
+    for (const [k, val] of Object.entries(s.values)) vals[k] = val[ch];
+    const conds = s.conditions.filter((c) => c.enabled[ch]).map((c) => COND_MAP[c.name]?.text(vals) ?? c.name).join(", ");
+    const armed = s.options["Arm_by_default"]?.[ch] === "TRUE" ? "yes" : "NO";
+    const delay = s.options["Use_Delay"]?.[ch] === "TRUE" ? `${vals.delay} s` : "none";
+    return `<tr><td><b>${ch}</b></td><td>${armed}</td><td>${delay}</td><td>${e(conds || "no conditions")}</td><td class="chk">☐</td></tr>`;
+  }).join("");
+  $("report").innerHTML = `
+    <h1>Pad card${vname ? `: ${e(vname)}` : ""}</h1>
+    <div class="meta">Date ____________ &nbsp; Flyer ____________________ &nbsp; Settings file ${e(name)}</div>
+    <div class="cols">
+      <section><h2>Vehicle</h2><table>
+        <tr><td>Motor</td><td class="n">${motor ? e(motor) : "________"}</td></tr>
+        <tr><td>Liftoff mass</td><td class="n">${v.burnoutLb !== null ? lbs(v.burnoutLb + (v.propLb ?? 0)) : "________"}</td></tr>
+        <tr><td>Burnout mass</td><td class="n">${lbs(v.burnoutLb)}</td></tr>
+        <tr><td>Body diameter</td><td class="n">${v.diaIn.toFixed(2)} in</td></tr>
+        <tr><td>Expected apogee</td><td class="n">${Number.isFinite(apo) ? `${apo.toFixed(0)} ft` : "________"}</td></tr>
+      </table></section>
+      <section><h2>On the pad</h2><table>
+        <tr><td>Altimeter armed, beeps OK</td><td class="chk">☐</td></tr>
+        <tr><td>GPS tracker locked, sats ______</td><td class="chk">☐</td></tr>
+        <tr><td>Charges and e-matches checked</td><td class="chk">☐</td></tr>
+        <tr><td>Rail angle ______°, wind ______ mph</td><td class="chk">☐</td></tr>
+        <tr><td>RSO initials ______</td><td class="chk">☐</td></tr>
+      </table></section>
+    </div>
+    <section><h2>Deployment channels</h2><table><tr><th>Channel</th><th>Armed</th><th>Delay</th><th>Fires when all are true</th><th>OK</th></tr>${chans}</table></section>
+    <section><h2>Settings check</h2>${issues.length ? `<table>${issues.map((i) => `<tr><td class="${i.level === "warn" ? "fail" : ""}">${i.level === "warn" ? "Warning" : "Note"}</td><td><b>${e(i.title)}</b>. ${e(i.detail)}</td></tr>`).join("")}</table>` : "<p>No common setup problems found.</p>"}</section>
+    <div class="foot">Printed ${new Date().toLocaleString()} from Data Compare. Check against the altimeter itself before flight.</div>`;
+  window.print();
+});
 
 function renderScrubEvents() {
   const span = A!.tEnd - A!.tStart;

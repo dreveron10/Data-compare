@@ -37,3 +37,8 @@ export function setVehicle(key: string, v: Vehicle) {
   a[key] = v;
   try { localStorage.setItem(KEY, JSON.stringify(a)); } catch { /* full or blocked */ }
 }
+
+/** vehicle names that have numbers stored (the default one excluded) */
+export function vehicleNames(): string[] {
+  return Object.keys(all()).filter((k) => k !== "default");
+}
