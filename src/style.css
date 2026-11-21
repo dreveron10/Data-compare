@@ -628,3 +628,5 @@ table.chute td, table.chute th { font-size: 13px; white-space: nowrap; }
 .gps-track .lbl { fill: var(--muted); font-size: 11px; font-family: inherit; }
 @media (max-width: 700px) { .gps-only { grid-template-columns: 1fr; } }
 .veh-ork { margin-top: 10px; display: inline-block; }
+.lib-trash { margin-top: 12px; }
+.lib-trash summary { cursor: pointer; }

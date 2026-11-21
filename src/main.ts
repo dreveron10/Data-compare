@@ -40,7 +40,7 @@ import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
 import { evaluate, loadDefaultRecovery, saveDefaultRecovery, type RecoveryConfig } from "./recovery";
 import {
-  deleteEntry, exportBackup, getEntry, importBackup, listEntries, newId, putEntry, requestPersistence, storageUse,
+  deleteEntry, listTrash, restoreEntry, trashDaysLeft, trashEntry, exportBackup, getEntry, importBackup, listEntries, newId, putEntry, requestPersistence, storageUse,
   type LibraryEntry,
 } from "./library";
 
@@ -1976,6 +1976,15 @@ async function renderLibrary() {
         </td></tr>`)
       .join("")}</table>`;
   }
+  const trash = await listTrash();
+  const tr = $("lib-trash") as HTMLDetailsElement;
+  tr.hidden = trash.length === 0;
+  $("lib-trash-sum").textContent = `Trash (${trash.length})`;
+  $("lib-trash-list").innerHTML = trash.length ? `<table class="lib-table">${trash.map((e) => `<tr>
+      <td>${escapeHtml(e.date || "-")}</td><td>${escapeHtml(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}</td>
+      <td class="muted small">${trashDaysLeft(e)} day${trashDaysLeft(e) === 1 ? "" : "s"} left</td>
+      <td class="acts"><button class="btn small-btn" data-trash="restore" data-id="${e.id}">Restore</button>
+      <button class="btn small-btn danger" data-trash="purge" data-id="${e.id}">Delete for good</button></td></tr>`).join("")}</table>` : "";
   const u = await storageUse();
   $("lib-usage").textContent = `${list.length === all.length ? `${all.length} saved` : `${list.length} of ${all.length} shown`}${u ? `, ${(u.used / 1048576).toFixed(1)} MB used of ${(u.quota / 1073741824).toFixed(1)} GB available` : ""}`;
 }
@@ -2091,14 +2100,29 @@ $("lib-list").addEventListener("click", async (ev) => {
   } else if (b.dataset.act === "share") {
     await shareEntry(entry);
   } else if (b.dataset.act === "del") {
-    if (!confirm(`Delete "${entry.name}" from the library? This cannot be undone (unless it is in a backup).`)) return;
-    await deleteEntry(entry.id);
+    await trashEntry(entry.id);
+    libSel = libSel.filter((x) => x !== entry.id);
+    renderLibSel();
     if (entry.id === currentEntryId) {
       currentEntryId = undefined;
       $("save-open").textContent = "Save flight";
     }
     await renderLibrary();
+    showWarnings([`"${entry.name}" moved to the trash at the bottom of the library. Restore it there within 30 days.`]);
   }
+});
+$("lib-trash-list").addEventListener("click", async (ev) => {
+  const b = (ev.target as HTMLElement).closest("button[data-trash]") as HTMLButtonElement | null;
+  if (!b) return;
+  const entry = await getEntry(b.dataset.id!);
+  if (!entry) return;
+  if (b.dataset.trash === "restore") {
+    await restoreEntry(entry.id);
+  } else {
+    if (!confirm(`Delete "${entry.name}" for good? This cannot be undone (unless it is in a backup).`)) return;
+    await deleteEntry(entry.id);
+  }
+  await renderLibrary();
 });
 {
   const inp = $<HTMLInputElement>("lib-import");

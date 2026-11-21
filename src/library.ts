@@ -30,7 +30,11 @@ export interface LibraryEntry {
   recovery?: RecoveryConfig;
   /** notes pinned to moments in the flight (s, flight time) */
   marks?: { t: number; text: string }[];
+  /** set when moved to the trash (ISO); emptied for good after TRASH_DAYS */
+  deletedAt?: string;
 }
+
+export const TRASH_DAYS = 30;
 
 const DB = "data-compare";
 const STORE = "flights";
@@ -54,14 +58,44 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
   });
 }
 
+const allEntries = () => tx<LibraryEntry[]>("readonly", (s) => s.getAll());
+
+/** Saved flights and sims, not counting the trash. */
 export async function listEntries(): Promise<LibraryEntry[]> {
-  const all = await tx<LibraryEntry[]>("readonly", (s) => s.getAll());
+  const all = (await allEntries()).filter((e) => !e.deletedAt);
   return all.sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.savedAt.localeCompare(a.savedAt));
 }
 
 export const getEntry = (id: string) => tx<LibraryEntry | undefined>("readonly", (s) => s.get(id));
 export const putEntry = (e: LibraryEntry) => tx("readwrite", (s) => s.put(e));
+/** Removes an entry for good. The library's Delete button uses trashEntry instead. */
 export const deleteEntry = (id: string) => tx("readwrite", (s) => s.delete(id));
+
+/** Move to the trash; it can be restored for TRASH_DAYS days. */
+export async function trashEntry(id: string) {
+  const e = await getEntry(id);
+  if (e) await putEntry({ ...e, deletedAt: new Date().toISOString() });
+}
+export async function restoreEntry(id: string) {
+  const e = await getEntry(id);
+  if (!e) return;
+  const { deletedAt: _d, ...rest } = e;
+  await putEntry(rest);
+}
+/** Days left before a trashed entry is removed for good. */
+export const trashDaysLeft = (e: LibraryEntry, now = Date.now()) =>
+  Math.max(0, Math.ceil(TRASH_DAYS - (now - Date.parse(e.deletedAt ?? "")) / 86_400_000));
+
+/** Trash newest first. Anything older than TRASH_DAYS is removed for good first. */
+export async function listTrash(now = Date.now()): Promise<LibraryEntry[]> {
+  const trashed = (await allEntries()).filter((e) => e.deletedAt);
+  const keep: LibraryEntry[] = [];
+  for (const e of trashed) {
+    if (trashDaysLeft(e, now) <= 0) await deleteEntry(e.id);
+    else keep.push(e);
+  }
+  return keep.sort((a, b) => b.deletedAt!.localeCompare(a.deletedAt!));
+}
 
 export function newId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
