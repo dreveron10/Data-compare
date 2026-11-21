@@ -47,6 +47,7 @@ export class Charts {
   private plots: uPlot[] = [];
   private defs: ChartDef[] = [];
   private playhead = 0;
+  private heads = new WeakMap<uPlot, HTMLDivElement>();
   private events: FlightEvent[] = [];
   private phases: Phase[] = [];
   private syncingScale = false;
@@ -254,15 +255,26 @@ export class Charts {
       ctx.lineWidth = 1 * devicePixelRatio;
       ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + height); ctx.stroke();
     }
-    const px = Math.round(u.valToPos(this.playhead, "x", true));
-    if (px >= u.bbox.left && px <= u.bbox.left + u.bbox.width) {
-      ctx.globalAlpha = 1;
-      ctx.setLineDash([]);
-      ctx.strokeStyle = "#ff7a1a";
-      ctx.lineWidth = 2 * devicePixelRatio;
-      ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, top + height); ctx.stroke();
-    }
     ctx.restore();
+    this.placePlayhead(u);
+  }
+
+  /**
+   * The playhead is a positioned element over the plot instead of part of the canvas, so moving it
+   * costs one style change per chart rather than a full redraw of every chart.
+   */
+  private placePlayhead(u: uPlot) {
+    let el = this.heads.get(u);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "playhead";
+      u.over.appendChild(el);
+      this.heads.set(u, el);
+    }
+    const px = u.valToPos(this.playhead, "x");
+    const show = Number.isFinite(px) && px >= 0 && px <= u.bbox.width / devicePixelRatio;
+    el.style.display = show ? "" : "none";
+    if (show) el.style.transform = `translateX(${Math.round(px) - 1}px)`;
   }
 
   private exportCsv(u: uPlot, d: ChartDef) {
@@ -283,12 +295,7 @@ export class Charts {
 
   /** chart image with title and legend, no playhead (for PNG export and the report) */
   private async compose(u: uPlot, d: ChartDef): Promise<HTMLCanvasElement> {
-    // uPlot redraws on a microtask, so wait for the frame without the playhead
-    const keep = this.playhead;
-    this.playhead = NaN;
-    u.redraw(false, false);
-    await new Promise((r) => requestAnimationFrame(() => r(null)));
-    const src = u.ctx.canvas;
+    const src = u.ctx.canvas; // the playhead is not on the canvas, so the image is clean
     const dpr = devicePixelRatio;
     const pad = 16 * dpr, head = 34 * dpr, legend = 26 * dpr;
     const c = document.createElement("canvas");
@@ -312,8 +319,6 @@ export class Charts {
       ctx.fillText(s.label, x, y);
       x += ctx.measureText(s.label).width + 18 * dpr;
     }
-    this.playhead = keep;
-    u.redraw(false, false);
     return c;
   }
 
@@ -334,7 +339,7 @@ export class Charts {
 
   setPlayhead(t: number) {
     this.playhead = t;
-    for (const p of this.plots) p.redraw(false, false);
+    for (const p of this.plots) this.placePlayhead(p);
   }
 
   private resize() {
