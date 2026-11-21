@@ -43,6 +43,8 @@ export interface CompareTrace {
   accT?: ArrayLike<number>;
   acc?: ArrayLike<number>;
   path?: { t: ArrayLike<number>; x: ArrayLike<number>; y: ArrayLike<number>; z: ArrayLike<number> };
+  /** world attitude per sample (x,y,z,w), times relative to liftoff; flights only */
+  attitude?: { t: Float64Array; quat: Float32Array };
   /** path is in true east/north (true for sims with position data and GPS-aligned flights) */
   compass: boolean;
   events: { label: string; t: number }[];
@@ -105,6 +107,12 @@ export function traceFromFlight(a: Analysis, f: BlueRavenFlight): CompareTrace {
     accT = new Float64Array(f.hr.n);
     for (let i = 0; i < f.hr.n; i++) accT[i] = f.hr.t[i] - lift;
   }
+  let attitude: CompareTrace["attitude"];
+  if (f.hr && a.frame) {
+    const at = new Float64Array(f.hr.n);
+    for (let i = 0; i < f.hr.n; i++) at[i] = f.hr.t[i] - lift;
+    attitude = { t: at, quat: a.frame.worldQuat };
+  }
   const pt = new Float64Array(a.path.t.length);
   for (let i = 0; i < pt.length; i++) pt[i] = a.path.t[i] - lift;
   return {
@@ -113,6 +121,7 @@ export function traceFromFlight(a: Analysis, f: BlueRavenFlight): CompareTrace {
     t, alt: a.altSmooth, vVert: lr.velUp,
     accT, acc: a.axialAccel,
     path: { t: pt, x: a.path.x, y: a.path.y, z: a.path.z },
+    attitude,
     compass: a.compass,
     events: a.events.filter((e) => e.key !== "apogee_det").map((e) => ({ label: e.label, t: e.t - lift })),
     key: keyNumbersOf(a),

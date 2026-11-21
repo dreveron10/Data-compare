@@ -140,7 +140,7 @@ export class Replay3D {
   private skyTex: THREE.Texture;
   /** Earth view availability and loading progress: available=false when there is no GPS */
   onSatellite?: (available: boolean, progress: number) => void;
-  private cmpMarkers: { mesh: THREE.Mesh; c: ActiveCompare }[] = [];
+  private cmpMarkers: { mesh: THREE.Object3D; c: ActiveCompare }[] = [];
   private a?: Analysis;
   private f?: BlueRavenFlight;
   private t = 0;
@@ -566,7 +566,11 @@ export class Replay3D {
       label.userData.cmp = true;
       this.labels.push(label);
       this.cmpGroup.add(label);
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: col.getHex() }));
+      // ghost rocket in the comparison's colour
+      const mesh = buildRocket();
+      const ghostMat = new THREE.MeshBasicMaterial({ color: col.getHex(), transparent: true, opacity: 0.6, depthWrite: false });
+      mesh.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.material = ghostMat; });
+      mesh.getObjectByName("flame")!.visible = false;
       this.cmpGroup.add(mesh);
       this.cmpMarkers.push({ mesh, c });
     }
@@ -681,6 +685,18 @@ export class Replay3D {
         const p = c.trace.path!;
         const tc = Math.min(p.t[p.t.length - 1], Math.max(p.t[0], t - lift - c.offset));
         mesh.position.set(sampleAt(p.t, p.x, tc), sampleAt(p.t, p.y, tc), sampleAt(p.t, p.z, tc));
+        const att = c.trace.attitude;
+        if (att) {
+          // the comparison flight's own attitude
+          const i = indexAt(att.t, tc);
+          const q = att.quat;
+          mesh.quaternion.set(q[i * 4], q[i * 4 + 1], q[i * 4 + 2], q[i * 4 + 3]);
+        } else {
+          // sims: point along the direction of travel
+          const t2 = Math.min(p.t[p.t.length - 1], tc + 0.15);
+          const d = new THREE.Vector3(sampleAt(p.t, p.x, t2), sampleAt(p.t, p.y, t2), sampleAt(p.t, p.z, t2)).sub(mesh.position);
+          if (d.lengthSq() > 0.5) mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+        }
       }
     }  }
 
@@ -719,7 +735,7 @@ export class Replay3D {
         this.chute.position.copy(this.rocket.position).add(new THREE.Vector3(0, len * 0.9 + s, 0));
       }
       this.groundRing.scale.setScalar(Math.max(15, camDist * 0.02));
-      for (const { mesh } of this.cmpMarkers) mesh.scale.setScalar(Math.max(5, this.camera.position.distanceTo(mesh.position) * 0.008));
+      for (const { mesh } of this.cmpMarkers) mesh.scale.setScalar(Math.max(9, this.camera.position.distanceTo(mesh.position) * 0.07));
       for (const o of this.worldGroup.children) {
         if (o.userData.marker) o.scale.setScalar(Math.max(6, this.camera.position.distanceTo(o.position) * 0.006));
       }
