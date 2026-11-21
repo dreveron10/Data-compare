@@ -1735,6 +1735,28 @@ async function openTogether() {
   libSel = [];
 }
 
+// the entries currently listed (after search, filter and sort), for the flight log export
+let libShown: LibraryEntry[] = [];
+$("lib-log").addEventListener("click", () => {
+  const cols: [string, (e: LibraryEntry) => string | number | null | undefined][] = [
+    ["Date", (e) => e.date], ["Name", (e) => e.name], ["Kind", (e) => e.kind], ["Vehicle", (e) => e.vehicle], ["Motor", (e) => e.motor],
+    ["Apogee (ft AGL)", (e) => e.stats.apogee], ["Max velocity (ft/s)", (e) => e.stats.maxVel], ["Max boost accel (g)", (e) => e.stats.maxAccel],
+    ["Max Mach", (e) => e.stats.maxMach], ["Max q (psf)", (e) => e.stats.maxQ],
+    ["Drogue rate (ft/s)", (e) => e.stats.drogueRate], ["Main deploy (ft)", (e) => e.stats.mainAlt], ["Main rate (ft/s)", (e) => e.stats.mainRate],
+    ["Flight time (s)", (e) => e.stats.flightTime], ["Drift (ft)", (e) => e.stats.drift], ["GPS", (e) => (e.stats.hasGps ? "yes" : "")],
+    ["Coast Cd", (e) => e.stats.coastCd], ["Measured impulse (N·s)", (e) => e.stats.impulseNs],
+    ["Tags", (e) => (e.tags ?? []).join("; ")], ["Notes", (e) => e.notes],
+  ];
+  const cell = (v: string | number | null | undefined) => {
+    if (v === null || v === undefined || v === "") return "";
+    if (typeof v === "number") return Number.isFinite(v) ? String(Math.round(v * 100) / 100) : "";
+    return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  };
+  const csv = [cols.map((c) => cell(c[0])).join(","), ...libShown.map((e) => cols.map((c) => cell(c[1](e))).join(","))].join("\n");
+  // BOM so Excel opens the units (·, °) correctly
+  downloadBlob(`flight-log-${new Date().toISOString().slice(0, 10)}.csv`, new Blob(["\ufeff" + csv], { type: "text/csv" }));
+});
+
 async function renderLibrary() {
   const all = await listEntries();
   const q = $<HTMLInputElement>("lib-search").value.trim().toLowerCase();
@@ -1749,6 +1771,7 @@ async function renderLibrary() {
     : sort === "apogee-asc" ? apo(a) - apo(b)
     : sort === "name" ? a.name.localeCompare(b.name)
     : (b.date || "").localeCompare(a.date || "") || b.savedAt.localeCompare(a.savedAt));
+  libShown = list;
   // highlight search words
   const hl = (text: string) => {
     let h = escapeHtml(text);
