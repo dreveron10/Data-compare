@@ -13,6 +13,8 @@ import { calibHint } from "./calib";
 import { ejectionTimes } from "./ejection";
 import { aeroSeries } from "./aero";
 import { buildExport } from "./exportAll";
+import { diameterFor, diameterFromCdA } from "./chute";
+import { vMaxFor } from "./recovery";
 import { startTour, tourSeen } from "./tour";
 import { getVehicle, setVehicle, vehicleKeyOf, vehicleNames } from "./vehicle";
 import { checkSettings } from "./settingsCheck";
@@ -448,6 +450,7 @@ function renderDescent() {
         .join("")}`
     : '<tr><td class="muted">No steady descent found.</td></tr>';
   renderWind();
+  renderChute(phases, weight);
   renderCoast();
   renderMotor();
   const { x, y } = rateVsAltitude(flight, A);
@@ -467,6 +470,48 @@ function renderDescent() {
     ],
     series: [{}, { stroke: "#6cc4ff", width: 1.5, points: { show: false } }],
   }, [x.map((v) => conv(v, "ft")[0]), y.map((v) => conv(v, "ft/s")[0])], host);
+}
+
+// ---------- chute sizing ----------
+type ChuteCfg = { dv: number; mv: number | null; dcd: number; mcd: number };
+function chuteCfg(): ChuteCfg {
+  try { const c = JSON.parse(localStorage.getItem("dc.chute") ?? "null"); if (c) return c; } catch { /* ignore */ }
+  return { dv: 100, mv: null, dcd: 1.5, mcd: 2.2 };
+}
+function renderChute(phases: ReturnType<typeof descentPhases>, weight: number | null, rebuild = true) {
+  const c = chuteCfg();
+  const heaviest = Math.max(0, ...recovery.sections.map((x) => x.massLb));
+  // default main target: the fastest landing that keeps the heaviest section under the KE limit, minus 10%
+  const keV = heaviest > 0 ? vMaxFor(heaviest, recovery.keLimit) : null;
+  const mv = c.mv ?? (keV ? Math.floor(keV * 0.9) : 18);
+  if (rebuild) {
+    $<HTMLInputElement>("chute-dv").value = String(c.dv);
+    $<HTMLInputElement>("chute-mv").value = String(mv);
+    $<HTMLInputElement>("chute-dcd").value = String(c.dcd);
+    $<HTMLInputElement>("chute-mcd").value = String(c.mcd);
+  }
+  if (!weight) {
+    $("chute-sub").textContent = "Enter the recovery section masses to size the parachutes.";
+    $("chute-table").innerHTML = "";
+    return;
+  }
+  $("chute-sub").textContent = `For ${show(weight, "lb", 1)} at sea-level air. ${c.mv === null && keV ? `Main target defaults to 90% of ${keV.toFixed(1)} ft/s, the fastest landing that keeps the heaviest section (${heaviest} lb) under ${recovery.keLimit} ft-lbf.` : ""} Cd: about 1.5 for a flat or elliptical chute, 2.2 for a toroidal one; use the maker's value if you have it.`;
+  const row = (label: string, target: number, cd: number, flown?: { rate: number; cdA: number | null }) => {
+    const need = diameterFor(weight, target, cd);
+    const was = flown?.cdA ? diameterFromCdA(flown.cdA, cd) : null;
+    return `<tr><td>${label}</td><td>${conv(need, "in")[0].toFixed(0)} ${cu("in")}</td><td>${was !== null ? `${conv(was, "in")[0].toFixed(0)} ${cu("in")}` : "-"}</td><td>${flown ? show(Math.abs(flown.rate), "ft/s", 1) : "-"}</td></tr>`;
+  };
+  const drog = phases.find((p) => p.name === "Drogue"), main = phases.find((p) => p.name === "Main");
+  $("chute-table").innerHTML = `<tr><th>Chute</th><th>Needed</th><th>Flown acted like</th><th>Flown rate</th></tr>${row("Drogue", c.dv, c.dcd, drog)}${row("Main", mv, c.mcd, main)}`;
+}
+for (const id of ["chute-dv", "chute-mv", "chute-dcd", "chute-mcd"]) {
+  $(id).addEventListener("change", () => {
+    const n = (k: string) => { const x = parseFloat($<HTMLInputElement>(k).value); return Number.isFinite(x) && x > 0 ? x : null; };
+    const c = chuteCfg();
+    c.dv = n("chute-dv") ?? c.dv; c.mv = n("chute-mv"); c.dcd = n("chute-dcd") ?? c.dcd; c.mcd = n("chute-mcd") ?? c.mcd;
+    try { localStorage.setItem("dc.chute", JSON.stringify(c)); } catch { /* ignore */ }
+    renderDescent();
+  });
 }
 
 function renderWind() {

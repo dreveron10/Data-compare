@@ -561,3 +561,5 @@ li[tabindex="0"] { cursor: pointer; }
 .toast span { flex: 1; min-width: 200px; }
 .motor-cmp { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; }
 .motor-cmp .sw { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin: 0 6px 3px 0; vertical-align: middle; }
+.chute-in { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+table.chute td, table.chute th { font-size: 13px; white-space: nowrap; }

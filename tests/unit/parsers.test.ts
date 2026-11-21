@@ -38,3 +38,14 @@ describe("other altimeters", () => {
     expect(isGenericAlt("a,b,c\n1,2,3\n4,5,6\n7,8,9\n1,1,1\n")).toBe(false);
   });
 });
+
+import { diameterFor, diameterFromCdA } from "../../src/chute";
+describe("chute sizing", () => {
+  it("40 lb at 22 ft/s on a Cd 2.2 chute needs about 76 in", () => {
+    expect(diameterFor(40, 22, 2.2)).toBeCloseTo(76, 0);
+  });
+  it("diameter from CdA round-trips", () => {
+    const d = 60, cd = 1.5, cdA = cd * Math.PI * (d / 12) ** 2 / 4;
+    expect(diameterFromCdA(cdA, cd)).toBeCloseTo(60, 6);
+  });
+});

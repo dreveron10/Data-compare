@@ -164,6 +164,17 @@
             <div class="muted small" id="wind-sub"></div>
             <table class="metrics wind" id="wind-table"></table>
           </div>
+          <div id="chute">
+            <h3 class="sub-h">Chute sizing</h3>
+            <div class="muted small" id="chute-sub"></div>
+            <div class="coast-in chute-in">
+              <label class="fld sm">Drogue target (ft/s)<input id="chute-dv" type="number" min="1" step="1" inputmode="decimal" /></label>
+              <label class="fld sm">Main target (ft/s)<input id="chute-mv" type="number" min="1" step="0.5" inputmode="decimal" /></label>
+              <label class="fld sm">Drogue Cd<input id="chute-dcd" type="number" min="0.1" step="0.05" inputmode="decimal" /></label>
+              <label class="fld sm">Main Cd<input id="chute-mcd" type="number" min="0.1" step="0.05" inputmode="decimal" /></label>
+            </div>
+            <table class="metrics chute" id="chute-table"></table>
+          </div>
         </div>
         <div class="panel" id="motor-panel" hidden>
           <h2>Motor from the accelerometer</h2>
