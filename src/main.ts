@@ -653,8 +653,8 @@ type CoastCfg = { massLb: number | null; diaIn: number };
 // the vehicle these numbers belong to: the saved flight's vehicle name, or this browser's default
 let vehicleKey = "default";
 let vehicleLabel = "";
-function coastCfg(): CoastCfg {
-  const v = getVehicle(vehicleKey);
+function coastCfg(vk = vehicleKey): CoastCfg {
+  const v = getVehicle(vk);
   return { massLb: v.burnoutLb, diaIn: v.diaIn };
 }
 function renderCoast(rebuildInputs = true) {
@@ -768,8 +768,8 @@ function railHtml(): string {
 // ---------- motor (thrust from the accelerometer) ----------
 let motorPlot: uPlot | null = null;
 type MotorCfg = { propLb: number | null; ratedNs: number | null };
-function motorCfg(): MotorCfg {
-  const v = getVehicle(vehicleKey);
+function motorCfg(vk = vehicleKey): MotorCfg {
+  const v = getVehicle(vk);
   return { propLb: v.propLb, ratedNs: v.ratedNs };
 }
 function renderMotor(rebuildInputs = true) {
@@ -841,7 +841,9 @@ function coastInput() {
 }
 
 /** accelerometer and air-data numbers kept with a saved flight so the library can trend them */
-function measuredStats() {
+const curFlight = () => flight;
+const curA = () => A;
+function measuredStats(flight = curFlight(), A = curA(), vk = vehicleKey, rec = recovery) {
   if (!A || !flight) return {};
   const aero = aeroSeries(flight, A);
   const lr = flight.lr!;
@@ -862,12 +864,12 @@ function measuredStats() {
     maxQ: aero?.maxQ ?? null, maxMach: aero?.maxMach ?? null,
     padBattV: Number.isFinite(pad) ? pad : null, minBattV: Number.isFinite(low) ? low : null, dataWarnings,
   };
-  const sl = slRows();
+  const sl = slRows(flight, A, vk, rec);
   out.slPass = sl.filter((r) => r.verdict === "pass").length;
   out.slOver = sl.filter((r) => r.verdict === "fail").map((r) => r.label);
   if (flight.hr && A.axialAccel) {
-    const cc = coastCfg(), mc = motorCfg();
-    const m = cc.massLb ?? recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
+    const cc = coastCfg(vk), mc = motorCfg(vk);
+    const m = cc.massLb ?? rec.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
     const cd = coastDrag(flight, A, m, cc.diaIn)?.cd50 ?? null;
     out.coastCd = cd;
     out.impulseNs = thrustCurve(flight, A, m, mc.propLb ?? 0, cc.diaIn, cd ?? 0.45)?.impulseNs ?? null;
@@ -1008,13 +1010,13 @@ function recoveryInputs(a: Analysis = A!) {
 
 // ---------- Student Launch checks: the flight-data requirements in one place ----------
 type SLRow = { label: string; value: string; limit: string; verdict: "pass" | "fail" | "na"; note?: string };
-function slRows(f: BlueRavenFlight | undefined = flight, a: Analysis | undefined = A): SLRow[] {
+function slRows(f: BlueRavenFlight | undefined = flight, a: Analysis | undefined = A, vk = vehicleKey, recCfg = recovery): SLRow[] {
   if (!a || !f) return [];
   const rows: SLRow[] = [];
-  const re = railExit(f, a, getVehicle(vehicleKey).railFt);
+  const re = railExit(f, a, getVehicle(vk).railFt);
   rows.push({
     label: "Rail exit speed", value: re ? show(re.v, "ft/s") : f.hr ? "first motion not found" : "needs the high-rate log", limit: `≥ ${show(SL_MIN_RAIL_EXIT, "ft/s")}`,
-    verdict: re ? (re.v >= SL_MIN_RAIL_EXIT ? "pass" : "fail") : "na", note: `${show(getVehicle(vehicleKey).railFt, "ft", 1)} of rail travel (Vehicle card)`,
+    verdict: re ? (re.v >= SL_MIN_RAIL_EXIT ? "pass" : "fail") : "na", note: `${show(getVehicle(vk).railFt, "ft", 1)} of rail travel (Vehicle card)`,
   });
   const ae = aeroSeries(f, a);
   rows.push({ label: "Stays subsonic", value: ae ? `Mach ${ae.maxMach.toFixed(2)}` : "needs pressure data", limit: "< Mach 1", verdict: ae ? (ae.maxMach < 1 ? "pass" : "fail") : "na" });
@@ -1023,7 +1025,7 @@ function slRows(f: BlueRavenFlight | undefined = flight, a: Analysis | undefined
     label: "Apogee in the 4,000 to 6,000 ft band", value: k.apogee === null ? "no apogee found" : show(k.apogee, "ft"), limit: "4000 to 6000 ft",
     verdict: k.apogee === null ? "na" : k.apogee >= 4000 && k.apogee <= 6000 ? "pass" : "fail",
   });
-  const rec = evaluate(recovery, recoveryInputs(a));
+  const rec = evaluate(recCfg, recoveryInputs(a));
   for (const r of rec.rows) rows.push({ label: r.label, value: r.value, limit: r.limit, verdict: r.verdict, note: r.sub ?? r.note });
   return rows;
 }
@@ -2037,6 +2039,64 @@ $("cmp-csv").addEventListener("click", () => {
   }
   const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
   downloadBlob(`${fileSlug(me)}-comparison.csv`, new Blob(["\ufeff" + csv], { type: "text/csv" }));
+});
+
+// ---------- recompute stored numbers for every saved flight ----------
+type Stats = LibraryEntry["stats"];
+function statsFor(f: BlueRavenFlight, a: Analysis, e: LibraryEntry): Stats {
+  const k = keyNumbersOf(a);
+  return {
+    apogee: k.apogee, flightTime: k.flightTime, drift: k.drift, maxVel: k.maxVel, hasGps: !!f.gps,
+    drogueRate: k.drogueRate, mainRate: k.mainRate, maxAccel: k.maxAccel, mainAlt: k.mainAlt,
+    ...measuredStats(f, a, vehicleKeyOf(e.vehicle), e.recovery ?? loadDefaultRecovery()),
+  };
+}
+const STAT_NAMES: Partial<Record<keyof Stats, string>> = {
+  apogee: "apogee", coastCd: "coast Cd", impulseNs: "impulse", maxQ: "max q", maxMach: "max Mach",
+  padBattV: "pad battery", minBattV: "lowest battery", dataWarnings: "data warnings", slPass: "SL checks", slOver: "SL checks",
+  drogueRate: "drogue rate", mainRate: "main rate", mainAlt: "main altitude", drift: "drift", maxVel: "max velocity", maxAccel: "max accel", flightTime: "flight time",
+};
+function statChanges(old: Stats, nu: Stats): string[] {
+  const out = new Set<string>();
+  for (const key of Object.keys(nu) as (keyof Stats)[]) {
+    const a = old[key], b = nu[key];
+    let same: boolean;
+    if (Array.isArray(a) || Array.isArray(b)) same = JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    else if (typeof a === "number" && typeof b === "number") same = Math.abs(a - b) <= Math.max(1e-6, 0.005 * Math.abs(a));
+    else same = (a ?? null) === (b ?? null);
+    if (!same && STAT_NAMES[key]) out.add(STAT_NAMES[key]!);
+  }
+  return [...out];
+}
+$("lib-refresh").addEventListener("click", async () => {
+  const btn = $<HTMLButtonElement>("lib-refresh");
+  const all = (await listEntries()).filter((e) => e.kind === "flight");
+  if (!all.length) return;
+  btn.disabled = true;
+  const updates: { e: LibraryEntry; stats: Stats; what: string[] }[] = [];
+  const failed: string[] = [];
+  try {
+    for (const [i, e] of all.entries()) {
+      btn.textContent = `Checking ${i + 1} of ${all.length}`;
+      try {
+        const res = await loadAndAnalyze(e.files);
+        if (!res.flight.lr || !res.analysis) { failed.push(e.name); continue; }
+        const stats = statsFor(res.flight, res.analysis, e);
+        const what = statChanges(e.stats, stats);
+        if (what.length) updates.push({ e, stats, what });
+      } catch { failed.push(e.name); }
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Refresh stored numbers";
+  }
+  const tail = failed.length ? `\n\nCouldn't read: ${failed.join(", ")}` : "";
+  if (!updates.length) { alert(`All ${all.length} saved flights are already up to date.${tail}`); return; }
+  const list = updates.slice(0, 10).map((u) => `${u.e.name}: ${u.what.join(", ")}`).join("\n") + (updates.length > 10 ? `\n...and ${updates.length - 10} more` : "");
+  if (!confirm(`${updates.length} of ${all.length} saved flights would get new stored numbers, using each flight's own Recovery check and the current Vehicle card for its vehicle. Files, names and notes don't change.\n\n${list}${tail}\n\nUpdate them?`)) return;
+  for (const u of updates) await putEntry({ ...u.e, stats: { ...u.e.stats, ...u.stats } });
+  await renderLibrary();
+  if (!$("lib-trends").hidden) await renderTrends();
 });
 
 let libShown: LibraryEntry[] = [];
