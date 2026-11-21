@@ -24,7 +24,7 @@ Files are recognized by their headers, not their names, so renamed files still w
 - **Summary:** apogee, max velocity, burnout, tilt, roll, descent rates, deploy altitude and fire times. Each value is shown next to what the Blue Raven reported.
 - **GPS (optional):** load the Featherweight GPS tracker CSV with the Blue Raven files. The logs are time aligned automatically (launch detection, refined by matching vertical velocity; manual override available), the scene is rotated to true east/north, the descent follows the real GPS drift, and a Blue Raven vs GPS table compares apogee, velocities, descent rates and drift, with a map link to the landing spot.
 - **Compare:** overlay an OpenRocket simulation export or a second Blue Raven flight. Both are aligned at liftoff and shown pink dashed on the charts and in 3D (with a marker moving in sync), plus a side-by-side table (apogee, time to apogee, max velocity and accel, burnout, descent rates, main deploy altitude, flight time, drift). For the sim path in 3D, include "Position East/North of launch" in the OpenRocket export.
-- **Satellite ground:** with a GPS log, Esri World Imagery around the pad is placed under the 3D scene (toggle with the Satellite button).
+- **Earth view:** with a GPS log, the 3D ground becomes real terrain: Esri World Imagery draped on AWS Terrain Tiles elevation, in nested level-of-detail rings (sharp near the field, out to the horizon with Earth curvature), under a sky with haze. Toggle with the Earth button. No API key needed.
 - **Deployment settings:** the condition matrix from the settings XLSX for each channel, with each condition marked met/unmet at the moment the channel fired.
 
 ## How the numbers are computed

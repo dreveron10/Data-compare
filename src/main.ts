@@ -5,14 +5,14 @@ import { Replay3D, type CameraMode } from "./replay3d";
 import { Charts } from "./charts";
 import { KEY_ROWS, keyNumbersOf, traceFromFlight, traceFromSim, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
-import { SAT_ATTRIBUTION } from "./satellite";
+import { EARTH_ATTRIBUTION } from "./earth";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const app = $("app");
 // 3D needs WebGL; without it (old GPUs, some remote browsers) the rest of the site still works
 type ReplayApi = Pick<Replay3D, "setFlight" | "setCompare" | "setTime" | "setCameraMode" | "setSatellite"> & {
-  onSatellite?: (loaded: boolean) => void;
+  onSatellite?: (available: boolean, progress: number) => void;
 };
 let replay: ReplayApi;
 try {
@@ -38,12 +38,14 @@ let lastChartUpdate = 0;
 let gpsOffsetOverride: number | undefined;
 let cmp: CompareTrace | undefined;
 
-// ---------- satellite ground ----------
+// ---------- Earth view (terrain + imagery) ----------
 let satOn = true;
-replay.onSatellite = (loaded) => {
-  $("sat-toggle").hidden = !loaded;
-  $("sat-attrib").hidden = !(loaded && satOn);
-  $("sat-attrib").textContent = SAT_ATTRIBUTION;
+replay.onSatellite = (available, progress) => {
+  const btn = $("sat-toggle");
+  btn.hidden = !available;
+  btn.textContent = progress < 1 ? `Earth ${Math.round(progress * 100)}%` : "Earth";
+  $("sat-attrib").hidden = !(available && satOn);
+  $("sat-attrib").textContent = EARTH_ATTRIBUTION;
 };
 $("sat-toggle").addEventListener("click", () => {
   satOn = !satOn;

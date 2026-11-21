@@ -9,7 +9,7 @@ import type { Analysis } from "./analysis";
 import { indexAt, lowerBound } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
 import { sampleAt, type CompareTrace } from "./compare";
-import { buildSatelliteGround } from "./satellite";
+import { EarthTerrain } from "./earth";
 
 export type CameraMode = "follow" | "overview" | "ground";
 
@@ -125,12 +125,14 @@ export class Replay3D {
   private insetRocket = buildRocket();
 
   private cmpGroup = new THREE.Group();
-  private satMesh?: THREE.Mesh;
-  private satOn = true;
+  private earth?: EarthTerrain;
+  private earthOn = true;
+  private earthReady = false;
   private grid?: THREE.GridHelper;
-  private loadToken = 0;
-  /** called when satellite imagery finishes loading (true) or is unavailable (false) */
-  onSatellite?: (loaded: boolean) => void;
+  private groundMesh?: THREE.Mesh;
+  private skyTex: THREE.Texture;
+  /** Earth view availability and loading progress: available=false when there is no GPS */
+  onSatellite?: (available: boolean, progress: number) => void;
   private cmpMarker?: THREE.Mesh;
   private cmp?: CompareTrace;
   private a?: Analysis;
@@ -139,12 +141,12 @@ export class Replay3D {
   private ro: ResizeObserver;
 
   constructor(private host: HTMLElement, private insetHost: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     this.renderer.setClearColor(COLORS.bg);
     host.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(50, 1, 1, 400000);
+    this.camera = new THREE.PerspectiveCamera(50, 1, 1, 3000000);
     this.camera.position.set(-1500, 900, 1500);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -152,6 +154,20 @@ export class Replay3D {
     this.controls.maxPolarAngle = Math.PI * 0.495;
 
     this.scene.fog = new THREE.Fog(COLORS.bg, 20000, 120000);
+    {
+      // sky gradient for Earth view
+      const c = document.createElement("canvas");
+      c.width = 2; c.height = 256;
+      const ctx = c.getContext("2d")!;
+      const g = ctx.createLinearGradient(0, 0, 0, 256);
+      g.addColorStop(0, "#3d6fb0");
+      g.addColorStop(0.6, "#9cc0e6");
+      g.addColorStop(1, "#dbe7f3");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 2, 256);
+      this.skyTex = new THREE.CanvasTexture(c);
+      this.skyTex.colorSpace = THREE.SRGBColorSpace;
+    }
     this.scene.add(new THREE.HemisphereLight(0xbcd2ff, 0x1a2030, 1.1));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
     sun.position.set(-3, 5, 2);
@@ -265,21 +281,31 @@ export class Replay3D {
     this.worldGroup.add(grid);
     this.grid = grid;
 
-    // satellite imagery (needs GPS for the pad location); loads in the background
-    this.satMesh = undefined;
-    const token = ++this.loadToken;
+    this.groundMesh = ground;
+
+    // Earth view (real terrain + imagery) needs the GPS pad position; loads in the background
+    this.earth?.dispose();
+    if (this.earth) this.scene.remove(this.earth.group);
+    this.earth = undefined;
+    this.earthReady = false;
     if (a.gps && f.gps) {
-      buildSatelliteGround(f.gps.padLat, f.gps.padLon, size / 2).then((mesh) => {
-        if (token !== this.loadToken) { mesh?.geometry.dispose(); return; }
-        if (!mesh) { this.onSatellite?.(false); return; }
-        this.satMesh = mesh;
-        this.worldGroup.add(mesh);
+      const earth = new EarthTerrain(f.gps.padLat, f.gps.padLon);
+      this.earth = earth;
+      this.scene.add(earth.group);
+      // centre the detail on the middle of the flight (pad to landing)
+      const li = a.gps.x.length - 1;
+      const cE = a.gps.x[li] / 2, cN = -a.gps.z[li] / 2;
+      this.onSatellite?.(true, 0);
+      earth.build(cE, cN, 16, 9, (done, total) => {
+        if (this.earth !== earth) return;
+        this.earthReady = done > 0;
         this.applySatellite();
-        this.onSatellite?.(true);
+        this.onSatellite?.(true, done / total);
       });
     } else {
-      this.onSatellite?.(false);
+      this.onSatellite?.(false, 0);
     }
+    this.applySatellite();
 
     // pad
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(30, 30, 4, 24), new THREE.MeshStandardMaterial({ color: 0x7bd88f }));
@@ -422,14 +448,28 @@ export class Replay3D {
   }
 
   setSatellite(on: boolean) {
-    this.satOn = on;
+    this.earthOn = on;
     this.applySatellite();
   }
 
   private applySatellite() {
-    const show = !!this.satMesh && this.satOn;
-    if (this.satMesh) this.satMesh.visible = show;
-    if (this.grid) (this.grid.material as THREE.Material).opacity = show ? 0.18 : 0.55;
+    const show = !!this.earth && this.earthOn && this.earthReady;
+    if (this.earth) this.earth.group.visible = show;
+    if (this.grid) this.grid.visible = !show;
+    if (this.groundMesh) this.groundMesh.visible = !show;
+    const fog = this.scene.fog as THREE.Fog;
+    if (show) {
+      this.scene.background = this.skyTex;
+      fog.color.set(0xc9d8ea);
+      // haze fades the far edge of the terrain into the sky
+      fog.near = 60000; fog.far = 520000;
+      this.controls.maxDistance = 350000;
+    } else {
+      this.scene.background = null;
+      fog.color.set(COLORS.bg);
+      fog.near = 20000; fog.far = 120000;
+      this.controls.maxDistance = Infinity;
+    }
   }
 
   /** Draw a comparison path (sim or another flight) with a marker that moves in sync. */
