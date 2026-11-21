@@ -385,6 +385,38 @@
           <p>Sims and other flights are lined up at liftoff, apogee or main deploy, then shifted by the time you set. Sim acceleration is shown the way an accelerometer would read it (kinematic plus 1 g).</p>
         </section>
         <section>
+          <h4>Mach and dynamic pressure</h4>
+          <p>Speed is the vertical velocity divided by the cosine of the tilt, because the inertial horizontal velocity drifts. Air density comes from the logged pressure and a standard lapse-rate temperature from the pad. q = ½ρv², Mach = v / √(γRT).</p>
+        </section>
+        <section>
+          <h4>Coast drag</h4>
+          <p>Between burnout and apogee, Cd = 2·m·a / (ρ·v²·A), with the burnout mass and body diameter from the Vehicle card. The window stops at any pyro fire before apogee so an early ejection doesn't count as drag. The sim hint fits a quadratic-drag coast to the sim's own coast and asks how high it would go from the real burnout speed.</p>
+        </section>
+        <section>
+          <h4>Motor, rail exit and liftoff</h4>
+          <p>Thrust = m·a + drag (coast Cd, or 0.45 without one), with mass falling in step with delivered impulse (constant Isp), solved iteratively. Rail exit integrates the accelerometer reading minus 1 g from first motion (above 1.15 g) until the rocket has moved the rail length, then compares to the 52 ft/s Student Launch minimum. Angle of attack at rail exit is the arctangent of the lowest GPS wind over rail exit speed.</p>
+        </section>
+        <section>
+          <h4>Ejection timing</h4>
+          <p>For each pyro fire, the first jolt in the accelerometer after it (the charge separating the airframe) and the biggest load in the next 6 s (the parachute opening), stopping before touchdown.</p>
+        </section>
+        <section>
+          <h4>Student Launch checks</h4>
+          <p>Rail exit speed, kinetic energy of each section under the main, descent time, drift and apogee against the declared target, each against the handbook limit. Masses come from the Vehicle card, so placeholder masses give placeholder results.</p>
+        </section>
+        <section>
+          <h4>Parachute sizing and landing what-if</h4>
+          <p>Diameter for a target rate: D = √(4·2W / (ρv²Cd) / π). The what-if starts at the point where the flown chute had settled, then descends through this flight's GPS wind profile with the new main altitude or drogue rate.</p>
+        </section>
+        <section>
+          <h4>Fin flutter</h4>
+          <p>Flutter speed from Peak of Flight #291 (based on NACA TN 4197): Vf = a·√(G / (1.337·AR³·P·(λ+1) / (2(AR+2)(t/c)³))), using local speed of sound and pressure at each point of the flight. The margin is the smallest ratio of flutter speed to speed flown. It is a screening number for flat, solid fins.</p>
+        </section>
+        <section>
+          <h4>Library</h4>
+          <p>Saved flights live in this browser's storage. Deleted flights go to the trash for 30 days, then are removed for good. Trends, health (battery and data warnings) and the flight log use the numbers stored when each flight was saved, so re-save older flights after changing the Vehicle card. An OpenRocket .ork can fill the Vehicle card: largest body tube diameter, first trapezoidal fin set and the first simulation's mass at liftoff and burnout.</p>
+        </section>
+        <section>
           <h4>Earth view</h4>
           <p>Esri World Imagery draped on AWS Terrain Tiles (Terrarium elevation), loaded in rings from about 1 m per pixel near the pad out to a few km per pixel at the horizon, with Earth curvature.</p>
         </section>
