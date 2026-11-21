@@ -1789,3 +1789,15 @@ renderRecent();
 // open a sample straight from the URL, e.g. ?sample=SN0614
 const qs = new URLSearchParams(location.search).get("sample");
 if (qs && /^SN\d+$/.test(qs)) loadSample(qs);
+
+// ---------- offline at the launch field ----------
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("./sw.js").catch(() => undefined); });
+}
+function renderOnline() {
+  const off = !navigator.onLine;
+  $("offline-badge").hidden = !off;
+}
+window.addEventListener("online", renderOnline);
+window.addEventListener("offline", renderOnline);
+renderOnline();
