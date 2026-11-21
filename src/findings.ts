@@ -145,6 +145,25 @@ export function findFindings(f: BlueRavenFlight, a: Analysis): Finding[] {
       t,
     });
   }
+  // main that opened too low or too close to touchdown to slow the rocket down
+  const tMainF = fireT.Main;
+  if (tMainF !== undefined && tMainF > tApo) {
+    const iM = indexAt(lr.t, tMainF);
+    const altM = a.altSmooth[iM];
+    const toGround = tLand - tMainF;
+    if (altM < 300 || toGround < 8) {
+      // descent rate over the 2 s before the main fired
+      const i0 = indexAt(lr.t, tMainF - 2);
+      const rate = lr.t[iM] > lr.t[i0] ? -(a.altSmooth[iM] - a.altSmooth[i0]) / (lr.t[iM] - lr.t[i0]) : NaN;
+      const together = CHANNELS.filter((ch) => ch !== "Main" && fireT[ch] !== undefined && Math.abs(fireT[ch]! - tMainF) < 0.1);
+      out.push({
+        level: "warn",
+        title: altM < 300 ? "Main opened very low" : "Main opened late",
+        detail: `Main fired at ${altM.toFixed(0)} ft, ${toGround.toFixed(1)} s before touchdown${Number.isFinite(rate) ? `, while falling at ${rate.toFixed(0)} ft/s` : ""}. A main usually needs a few hundred feet to open and slow the rocket.${together.length ? ` ${together.join(" and ")} fired at the same moment, which looks like a low-altitude or landing condition rather than the planned main event.` : ""} Check the main's AGL setting and the descent before it.`,
+        t: tMainF,
+      });
+    }
+  }
   out.sort((x, y) => (x.t ?? 1e9) - (y.t ?? 1e9));
   if (!out.some((x) => x.level === "warn")) out.unshift({ level: "good", title: "Nothing unusual found", detail: "Deployments matched their settings and no large shocks, spikes or attitude problems were detected." });
   return out;
