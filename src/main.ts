@@ -328,7 +328,7 @@ function renderRedundancy() {
     return `<details class="redund" open><summary><i class="sw" style="background:${c.color}"></i>Same flight as ${escapeHtml(c.trace.name)}: ${bad ? `${bad} thing${bad === 1 ? "" : "s"} disagree` : "the two altimeters agree"}</summary>
       <table class="metrics redund-t"><tr><th></th><th>This unit</th><th>Other unit</th><th>Difference</th></tr>${r.rows
         .map((x) => `<tr class="${x.flag ? "flag" : ""}"><td>${escapeHtml(x.label)}</td><td>${escapeHtml(x.a)}</td><td>${escapeHtml(x.b)}</td><td>${escapeHtml(x.diff)}${x.flag ? '<span class="sr-only"> (disagrees)</span>' : ""}</td></tr>`).join("")}</table>
-      <p class="muted small">Matched on the logger clocks (same date, liftoff within 2 minutes). Baro offset is the median altitude difference from liftoff to landing, skipping 1.5 s around each pyro fire. A steady offset is usually pad altitude or port size; a spread that grows during descent points at a leaky bay or blocked port. Flagged: apogee off by more than 2% (30 ft minimum), fire times more than 0.5 s apart or a channel firing on one unit only.</p>
+      <p class="muted small">Matched on the logger clocks (same date, liftoff within 2 minutes). Baro offset is the median altitude difference from liftoff to landing, skipping 1.5 s around each pyro fire. A steady offset is usually pad altitude or port size; a spread that grows during descent points at a leaky bay or blocked port. Flagged: apogee off by more than 2% (${show(30, "ft")} minimum), fire times more than 0.5 s apart or a channel firing on one unit only.</p>
     </details>`;
   }).join("");
 }
@@ -372,7 +372,7 @@ function renderCompare() {
     .map((c) => {
       const hint = c.trace.kind === "sim" ? calibHint(flight!, A!, c.trace, coastCd) : null;
       return `<p><i class="sw" style="background:${c.color}"></i>${escapeHtml(whatChanged(mine, c.trace.key, cname(c)))}</p>${
-        hint ? `<details class="calib"><summary>How to make this sim match</summary>${hint.lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("")}<div class="calib-bar" title="Apogee gap split"><span class="b" style="flex:${Math.abs(hint.fromBoost).toFixed(0)}">Boost ${Math.abs(hint.fromBoost).toFixed(0)} ft</span><span class="c" style="flex:${Math.abs(hint.fromCoast).toFixed(0)}">Coast ${Math.abs(hint.fromCoast).toFixed(0)} ft</span></div></details>` : ""
+        hint ? `<details class="calib"><summary>How to make this sim match</summary>${hint.lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("")}<div class="calib-bar" title="Apogee gap split"><span class="b" style="flex:${Math.abs(hint.fromBoost).toFixed(0)}">Boost ${show(Math.abs(hint.fromBoost), "ft")}</span><span class="c" style="flex:${Math.abs(hint.fromCoast).toFixed(0)}">Coast ${show(Math.abs(hint.fromCoast), "ft")}</span></div></details>` : ""
       }`;
     })
     .join("");
@@ -495,7 +495,7 @@ function renderDescent() {
     : "Enter section masses in the recovery check to estimate parachute CdA.";
   $("desc-table").innerHTML = phases.length
     ? `<tr><th>Phase</th><th>Rate</th><th>At sea level</th><th>CdA</th></tr>${phases
-        .map((p) => `<tr title="${p.altTop.toFixed(0)} to ${p.altBottom.toFixed(0)} ft, T+${p.t0.toFixed(1)} to ${p.t1.toFixed(1)} s"><td>${p.name}<small class="muted" style="display:block">${conv(p.altTop, "ft")[0].toFixed(0)} to ${show(p.altBottom, "ft")}</small></td><td>${show(p.rate, "ft/s", 1)}</td><td>${show(p.seaLevelRate, "ft/s", 1)}</td><td>${show(p.cdA, "ft²", 1)}</td></tr>`)
+        .map((p) => `<tr title="${show(p.altTop, "ft")} to ${show(p.altBottom, "ft")}, T+${p.t0.toFixed(1)} to ${p.t1.toFixed(1)} s"><td>${p.name}<small class="muted" style="display:block">${conv(p.altTop, "ft")[0].toFixed(0)} to ${show(p.altBottom, "ft")}</small></td><td>${show(p.rate, "ft/s", 1)}</td><td>${show(p.seaLevelRate, "ft/s", 1)}</td><td>${show(p.cdA, "ft²", 1)}</td></tr>`)
         .join("")}`
     : '<tr><td class="muted">No steady descent found.</td></tr>';
   renderSwing(phases);
@@ -616,7 +616,7 @@ function renderChute(phases: ReturnType<typeof descentPhases>, weight: number | 
     $("chute-table").innerHTML = "";
     return;
   }
-  $("chute-sub").textContent = `For ${show(weight, "lb", 1)} at sea-level air. ${c.mv === null && keV ? `Main target defaults to 90% of ${keV.toFixed(1)} ft/s, the fastest landing that keeps the heaviest section (${heaviest} lb) under ${recovery.keLimit} ft-lbf.` : ""} Cd: about 1.5 for a flat or elliptical chute, 2.2 for a toroidal one; use the maker's value if you have it.`;
+  $("chute-sub").textContent = `For ${show(weight, "lb", 1)} at sea-level air. ${c.mv === null && keV ? `Main target defaults to 90% of ${show(keV, "ft/s", 1)}, the fastest landing that keeps the heaviest section (${show(heaviest, "lb", 1)}) under ${show(recovery.keLimit, "ft-lbf")}.` : ""} Cd: about 1.5 for a flat or elliptical chute, 2.2 for a toroidal one; use the maker's value if you have it.`;
   const row = (label: string, target: number, cd: number, flown?: { rate: number; cdA: number | null }) => {
     const need = diameterFor(weight, target, cd);
     const was = flown?.cdA ? diameterFromCdA(flown.cdA, cd) : null;
@@ -1023,7 +1023,7 @@ function slRows(f: BlueRavenFlight | undefined = flight, a: Analysis | undefined
   rows.push({ label: "Stays subsonic", value: ae ? `Mach ${ae.maxMach.toFixed(2)}` : "needs pressure data", limit: "< Mach 1", verdict: ae ? (ae.maxMach < 1 ? "pass" : "fail") : "na" });
   const k = keyNumbersOf(a);
   rows.push({
-    label: "Apogee in the 4,000 to 6,000 ft band", value: k.apogee === null ? "no apogee found" : show(k.apogee, "ft"), limit: "4000 to 6000 ft",
+    label: "Apogee in the Student Launch band", value: k.apogee === null ? "no apogee found" : show(k.apogee, "ft"), limit: `${show(4000, "ft")} to ${show(6000, "ft")}`,
     verdict: k.apogee === null ? "na" : k.apogee >= 4000 && k.apogee <= 6000 ? "pass" : "fail",
   });
   const rec = evaluate(recCfg, recoveryInputs(a));

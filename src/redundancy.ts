@@ -6,6 +6,7 @@
 import type { Analysis } from "./analysis";
 import { indexAt } from "./analysis";
 import { CHANNELS, type BlueRavenFlight } from "./parsers/blueRaven";
+import { show } from "./units";
 
 const ev = (a: Analysis, k: string) => a.events.find((e) => e.key === k)?.t;
 
@@ -34,7 +35,7 @@ export function redundancy(f1: BlueRavenFlight, a1: Analysis, f2: BlueRavenFligh
   const l1 = ev(a1, "liftoff") ?? 0, l2 = ev(a2, "liftoff") ?? 0;
   const apoAlt = (f: BlueRavenFlight, a: Analysis) => { const t = ev(a, "apogee"); return t === undefined ? null : a.altSmooth[indexAt(f.lr!.t, t)]; };
   const h1 = apoAlt(f1, a1), h2 = apoAlt(f2, a2);
-  rows.push({ label: "Apogee", a: fmt(h1, 0, " ft"), b: fmt(h2, 0, " ft"), diff: h1 !== null && h2 !== null ? fmt(h2 - h1, 0, " ft") : "-", flag: h1 !== null && h2 !== null && Math.abs(h2 - h1) > Math.max(30, 0.02 * h1) });
+  rows.push({ label: "Apogee", a: show(h1, "ft"), b: show(h2, "ft"), diff: h1 !== null && h2 !== null ? show(h2 - h1, "ft") : "-", flag: h1 !== null && h2 !== null && Math.abs(h2 - h1) > Math.max(30, 0.02 * h1) });
   const at = (a: Analysis, k: string, l: number) => { const t = ev(a, k); return t === undefined ? null : t - l; };
   const ta1 = at(a1, "apogee", l1), ta2 = at(a2, "apogee", l2);
   rows.push({ label: "Time to apogee", a: fmt(ta1, 2, " s"), b: fmt(ta2, 2, " s"), diff: ta1 !== null && ta2 !== null ? fmt(ta2 - ta1, 2, " s") : "-", flag: ta1 !== null && ta2 !== null && Math.abs(ta2 - ta1) > 1 });
@@ -64,8 +65,8 @@ export function redundancy(f1: BlueRavenFlight, a1: Analysis, f2: BlueRavenFligh
     const s = [...d].sort((x, y) => x - y);
     baroOffset = s[Math.floor(s.length / 2)];
     baroSpread = s[Math.floor(s.length * 0.95)] - s[Math.floor(s.length * 0.05)];
-    rows.push({ label: "Baro offset (median)", a: "", b: "", diff: fmt(baroOffset, 0, " ft"), flag: Math.abs(baroOffset) > 50 });
-    rows.push({ label: "Baro spread (5th to 95th %)", a: "", b: "", diff: fmt(baroSpread, 0, " ft"), flag: baroSpread > 100 });
+    rows.push({ label: "Baro offset (median)", a: "", b: "", diff: show(baroOffset, "ft"), flag: Math.abs(baroOffset) > 50 });
+    rows.push({ label: "Baro spread (5th to 95th %)", a: "", b: "", diff: show(baroSpread, "ft"), flag: baroSpread > 100 });
   }
   return { rows, baroOffset, baroSpread };
 }
