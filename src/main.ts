@@ -4,6 +4,7 @@ import { COND_MAP } from "./condLabels";
 import { initPreflight, preflight } from "./preflight";
 import { maybeNudgeAfterSave, renderBackupNudge } from "./backup";
 import { initOffline } from "./pwa";
+import { initHelp } from "./help";
 import { analyze, flightPhases, indexAt, type Analysis } from "./analysis";
 import { CHANNELS, identifyText, type BlueRavenFlight, type Channel } from "./parsers/blueRaven";
 import type { Replay3D, CameraMode } from "./replay3d";
@@ -2016,3 +2017,4 @@ $("rec-btn").addEventListener("click", () => recordVideo());
 
 initPreflight(showWarnings);
 initOffline();
+initHelp();
