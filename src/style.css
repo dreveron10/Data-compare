@@ -244,7 +244,9 @@ kbd { font: inherit; font-size: 12px; background: var(--panel-2); border: 1px so
 /* printable report: hidden on screen, the only thing printed */
 #report { display: none; }
 @media print {
-  @page { size: letter; margin: 12mm; }
+  @page { size: letter; margin: 12mm 12mm 14mm;
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8.5pt Barlow, system-ui, sans-serif; color: #6b7891; }
+  }
   html, body { background: #fff !important; }
   body > *:not(#report) { display: none !important; }
   #report { display: block; color: #111a2b; font-family: Barlow, system-ui, sans-serif; font-size: 10.5pt; line-height: 1.35; }
@@ -263,6 +265,9 @@ kbd { font: inherit; font-size: 12px; background: var(--panel-2); border: 1px so
   #report figure img { width: 100%; border-radius: 4px; }
   #report .foot { margin-top: 14px; color: #6b7891; font-size: 8.5pt; }
   #report section { break-inside: avoid; }
+  #report tr, #report p { break-inside: avoid; }
+  #report h3 { break-after: avoid; }
+  #report table { break-before: avoid; }
 }
 
 /* library tools */
