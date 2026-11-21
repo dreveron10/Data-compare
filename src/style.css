@@ -681,3 +681,4 @@ button.chipline:hover { border-color: var(--line); color: var(--ink, inherit); }
 .deploy-strip .ds-lbl { fill: var(--muted); font-size: 9.5px; }
 .deploy-strip .ds-bar { stroke: var(--muted); stroke-width: 2; opacity: 0.5; }
 .deploy-strip .ds-apo { stroke: var(--text); stroke-width: 2; }
+.tag.ref-tag { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }

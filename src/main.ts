@@ -974,6 +974,16 @@ async function loadVehicleKey() {
 
 // ---------- compare with the previous flight of the same vehicle ----------
 let previousEntry: LibraryEntry | null = null;
+// one pinned reference flight per vehicle (localStorage: vehicle key -> entry id)
+const REF_KEY = "dc.refFlights";
+function refFlights(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(REF_KEY) || "{}") as Record<string, string>; } catch { return {}; }
+}
+function setRefFlight(vehicleKey: string, id: string | null) {
+  const m = refFlights();
+  if (id) m[vehicleKey] = id; else delete m[vehicleKey];
+  try { localStorage.setItem(REF_KEY, JSON.stringify(m)); } catch { /* storage full or blocked: pin just won't stick */ }
+}
 async function findPreviousFlight(cur?: LibraryEntry) {
   previousEntry = null;
   const btn = $("cmp-last");
@@ -984,9 +994,13 @@ async function findPreviousFlight(cur?: LibraryEntry) {
   const earlier = (await listEntries())
     .filter((x) => x.kind === "flight" && x.id !== cur.id && vehicleKeyOf(x.vehicle) === key && when(x) < when(cur))
     .sort((a, b) => when(b).localeCompare(when(a)));
-  previousEntry = earlier[0] ?? null;
+  // a pinned reference wins over the latest earlier flight
+  const refId = refFlights()[key];
+  const ref = refId && refId !== cur.id ? await getEntry(refId) : undefined;
+  const pinned = !!ref && !ref.deletedAt && vehicleKeyOf(ref.vehicle) === key;
+  previousEntry = pinned ? ref! : earlier[0] ?? null;
   if (!previousEntry || cmps.some((c) => c.trace.name.includes(previousEntry!.name))) return;
-  btn.textContent = `Previous ${cur.vehicle.trim()} flight: ${previousEntry.name}${previousEntry.date ? ` (${previousEntry.date})` : ""}`;
+  btn.textContent = `${pinned ? "Reference" : "Previous"} ${cur.vehicle.trim()} flight: ${previousEntry.name}${previousEntry.date ? ` (${previousEntry.date})` : ""}`;
   btn.hidden = cmps.length >= MAX_COMPARES;
 }
 $("cmp-last").addEventListener("click", async () => {
@@ -2155,6 +2169,7 @@ function slChip(e: LibraryEntry) {
 }
 async function renderLibrary() {
   const all = await listEntries();
+  const refs = refFlights();
   const q = $<HTMLInputElement>("lib-search").value.trim().toLowerCase();
   const kind = $<HTMLSelectElement>("lib-kind").value;
   const sort = $<HTMLSelectElement>("lib-sort").value;
@@ -2187,7 +2202,7 @@ async function renderLibrary() {
       .map((e) => `<tr class="${e.id === currentEntryId ? "current" : ""}${libSel.includes(e.id) ? " sel" : ""}">
         <td class="pick"><input type="checkbox" data-pick="${e.id}" ${libSel.includes(e.id) ? "checked" : ""} aria-label="Select ${escapeHtml(e.name)}" /></td>
         <td>${escapeHtml(e.date || "-")}</td>
-        <td>${hl(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}${slChip(e)}
+        <td>${hl(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}${e.vehicle && refs[vehicleKeyOf(e.vehicle)] === e.id ? '<span class="tag ref-tag">Reference</span>' : ""}${slChip(e)}
           <div class="chips">${e.vehicle ? chipBtn(e.vehicle, "vehicle", hl) : ""}${e.motor ? chipBtn(e.motor, "motor", hl) : ""}${(e.tags ?? []).map((tg) => chipBtn(tg, "tag", hl, "tagc")).join("")}</div></td>
         <td class="num">${show(e.stats.apogee, "ft")}</td>
         <td class="num">${num(e.stats.flightTime, 1)} s</td>
@@ -2197,6 +2212,7 @@ async function renderLibrary() {
           ${e.kind === "flight" ? `<button class="btn small-btn" data-act="open" data-id="${e.id}">Open</button>` : ""}
           <button class="btn small-btn" data-act="cmp" data-id="${e.id}" ${!A || e.id === currentEntryId ? "disabled" : ""}>Compare</button>
           <button class="btn small-btn" data-act="share" data-id="${e.id}" title="Download as one file to send to a teammate">Share</button>
+          ${e.kind === "flight" && e.vehicle ? `<button class="btn small-btn" data-act="pin" data-id="${e.id}" aria-pressed="${refs[vehicleKeyOf(e.vehicle)] === e.id}" title="Use this flight as the ${escapeHtml(e.vehicle)} reference that new flights of this vehicle are compared with">${refs[vehicleKeyOf(e.vehicle)] === e.id ? "Unpin" : "Pin"}</button>` : ""}
           <button class="btn small-btn danger" data-act="del" data-id="${e.id}">Delete</button>
         </td></tr>`)
       .join("")}</table>`;
@@ -2332,6 +2348,10 @@ $("lib-list").addEventListener("click", async (ev) => {
     await loadCompare(entry.files);
   } else if (b.dataset.act === "share") {
     await shareEntry(entry);
+  } else if (b.dataset.act === "pin") {
+    const k = vehicleKeyOf(entry.vehicle);
+    setRefFlight(k, refFlights()[k] === entry.id ? null : entry.id);
+    await renderLibrary();
   } else if (b.dataset.act === "del") {
     await trashEntry(entry.id);
     libSel = libSel.filter((x) => x !== entry.id);
