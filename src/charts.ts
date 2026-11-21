@@ -7,6 +7,7 @@ import { flightPhases } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
 import { sampleAt, type ActiveCompare } from "./compare";
 import { cu, cv } from "./units";
+import { aeroSeries } from "./aero";
 
 /** resample a comparison series onto x (flight time), aligned at liftoff plus the comparison's offset */
 function onBase(x: ArrayLike<number>, lift: number, t: ArrayLike<number>, y: ArrayLike<number>) {
@@ -104,6 +105,18 @@ export class Charts {
           for (let i = 0; i < lr.n; i++) d[i] = other[i] - a.altSmooth[i];
           return { label: cmpName(c), data: d, color: c.color, width: 1.8, unit: "ft" };
         }),
+      });
+    }
+    const aero = aeroSeries(f, a);
+    if (aero) {
+      const tq = lr.t[aero.iMaxQ];
+      defs.push({
+        title: `Mach and dynamic pressure (max q ${cv(aero.maxQ, "psf").toFixed(cu("psf") === "kPa" ? 1 : 0)} ${cu("psf")} at T+${tq.toFixed(2)} s, Mach ${aero.mach[aero.iMaxQ].toFixed(2)})`,
+        yLabel: "psf", y2Label: "Mach", x: lr.t,
+        series: [
+          { label: "Dynamic pressure q", data: aero.qPsf, color: "#ff7a1a", width: 1.8, unit: "psf" },
+          { label: "Mach", data: aero.mach, color: "#6cc4ff", width: 1.5, unit: "", scale: "y2" },
+        ],
       });
     }
     if (a.gps && f.gps) {

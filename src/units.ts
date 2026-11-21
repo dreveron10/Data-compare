@@ -24,6 +24,7 @@ const TABLE: Record<string, [number, string]> = {
   "lb": [0.45359237, "kg"],
   "mph": [1.609344, "km/h"],
   "in": [2.54, "cm"],
+  "psf": [0.04788026, "kPa"],
 };
 
 /** convert a value in an imperial unit to the current system; other units pass through */
