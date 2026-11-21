@@ -14,7 +14,7 @@
       <div class="brand">
         <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2c4 4 6 9 6 15v6h-12v-6c0-6 2-11 6-15z" fill="#6cc4ff"/><path d="M10 18l-5 7 5-1zM22 18l5 7-5-1z" fill="#ff7a1a"/><circle cx="16" cy="12" r="2.4" fill="#0d1524"/><path d="M13 25h6l-3 5z" fill="#ff7a1a"/></svg>
         <div>
-          <div class="brand-name">Data Compare</div>
+          <h1 class="brand-name">Data Compare</h1>
           <div class="brand-sub" id="flight-name">Flight analyzer for Blue Raven, GPS and OpenRocket data</div>
         </div>
       </div>
@@ -29,8 +29,8 @@
           Open flight files
           <input id="file-input" type="file" multiple accept=".csv,.xlsx,.kml,.zip" hidden />
         </label>
-        <button class="btn" data-sample="SN0614">Sample: SN0614 + GPS (bullet bill)</button>
-        <button class="btn" data-sample="SN1742">Sample: SN1742</button>
+        <button class="btn" data-sample="SN0614" title="Sample flight SN0614 with GPS (bullet bill)">Sample: bullet bill</button>
+        <button class="btn" data-sample="SN1742" title="Sample flight SN1742, Blue Raven only">Sample: SN1742</button>
       </div>
     </header>
 
@@ -81,12 +81,12 @@
               </div>
               <p class="muted small">Or drag files anywhere on this page. Everything stays in your browser; nothing is uploaded.</p>
               <div class="wl-recent" id="wl-recent" hidden>
-                <h3>Recent in your library</h3>
+                <h2 class="wl-h">Recent in your library</h2>
                 <ul id="wl-recent-list"></ul>
               </div>
             </div>
             <div class="wl-files">
-              <h3>What to bring</h3>
+              <h2 class="wl-h">What to bring</h2>
               <dl>
                 <dt>Blue Raven</dt><dd>The HR, LR and summary CSVs from the Featherweight app. Add the deploy settings XLSX to see why each channel fired.</dd>
                 <dt>GPS tracker <span class="opt">optional</span></dt><dd>The Featherweight tracker CSV from the same flight adds true north, real drift and a satellite Earth view.</dd>
@@ -100,7 +100,7 @@
 
       <aside class="side">
         <div class="panel" id="video-panel" hidden>
-          <h3>Onboard video</h3>
+          <h2>Onboard video</h2>
           <div class="muted small" id="video-sub">Load a flight video (RunCam, phone) to play it in sync with the replay. It stays on your computer.</div>
           <div class="video-wrap" id="video-wrap" hidden>
             <video id="video" playsinline muted controls preload="auto"></video>
@@ -115,16 +115,16 @@
           </div>
         </div>
         <div class="panel" id="find-panel" hidden>
-          <h3>Findings</h3>
+          <h2>Findings</h2>
           <ul class="findings" id="findings"></ul>
         </div>
         <div class="panel">
-          <h3>Flight summary</h3>
+          <h2>Flight summary</h2>
           <div class="muted small">Site value vs what the Blue Raven reported</div>
           <table class="metrics" id="metrics"></table>
         </div>
         <div class="panel" id="rec-panel" hidden>
-          <h3>Recovery check</h3>
+          <h2>Recovery check</h2>
           <div class="muted small" id="rec-sub"></div>
           <table class="metrics rec" id="rec-table"></table>
           <details class="rec-edit">
@@ -143,18 +143,18 @@
           </details>
         </div>
         <div class="panel" id="desc-panel" hidden>
-          <h3>Descent</h3>
+          <h2>Descent</h2>
           <div class="muted small" id="desc-sub"></div>
           <table class="metrics desc" id="desc-table"></table>
           <div id="desc-chart"></div>
           <div id="wind" hidden>
-            <h4 class="sub-h">Wind from GPS drift</h4>
+            <h3 class="sub-h">Wind from GPS drift</h3>
             <div class="muted small" id="wind-sub"></div>
             <table class="metrics wind" id="wind-table"></table>
           </div>
         </div>
         <div class="panel" id="coast-panel" hidden>
-          <h3>Coast drag</h3>
+          <h2>Coast drag</h2>
           <div class="muted small" id="coast-sub"></div>
           <div class="coast-in">
             <label class="fld sm">Mass after burnout (lb)<input id="coast-mass" type="number" min="0" step="0.1" inputmode="decimal" /></label>
@@ -164,7 +164,7 @@
           <div id="coast-chart"></div>
         </div>
         <div class="panel" id="cmp-panel" hidden>
-          <h3>Compare</h3>
+          <h2>Compare</h2>
           <div class="muted small" id="cmp-sub">Overlay an OpenRocket simulation export or another Blue Raven flight. Both are aligned at liftoff.</div>
           <div class="seg align-seg" id="cmp-align" role="group" aria-label="Line comparisons up at" hidden>
             <span class="muted small">Line up at</span>
@@ -182,7 +182,7 @@
           </div>
         </div>
         <div class="panel" id="gps-panel" hidden>
-          <h3>Blue Raven vs GPS</h3>
+          <h2>Blue Raven vs GPS</h2>
           <div class="muted small" id="gps-sub"></div>
           <table class="metrics" id="compare"></table>
           <div class="gps-landing" id="gps-landing"></div>
@@ -193,11 +193,11 @@
           </div>
         </div>
         <div class="panel">
-          <h3>Events</h3>
+          <h2>Events</h2>
           <ul class="events" id="events"></ul>
         </div>
         <div class="panel" id="marks-panel" hidden>
-          <h3>Notes on the timeline</h3>
+          <h2>Notes on the timeline</h2>
           <form class="mark-form" id="mark-form" autocomplete="off">
             <input id="mark-text" type="text" maxlength="200" placeholder="Note at T+0.00 (press N)" aria-label="Note text" />
             <button class="btn small-btn" type="submit">Add</button>
@@ -205,7 +205,7 @@
           <ul class="marks" id="marks"></ul>
         </div>
         <div class="panel" id="settings-panel" hidden>
-          <h3>Deployment settings</h3>
+          <h2>Deployment settings</h2>
           <div id="settings"></div>
         </div>
       </aside>
@@ -232,7 +232,7 @@
           <div><kbd>N</kbd> add a note at this moment</div>
           <div><kbd>F</kbd> follow, <kbd>O</kbd> overview, <kbd>G</kbd> ground camera, <kbd>T</kbd> tour</div>
         </div>
-        <select id="speed" title="Playback speed (J / L)">
+        <select id="speed" title="Playback speed (J / L)" aria-label="Playback speed">
           <option value="0.1">0.1×</option>
           <option value="0.25">0.25×</option>
           <option value="0.5">0.5×</option>
@@ -244,7 +244,7 @@
 
       <section class="charts-wrap">
         <div class="charts-head">
-          <h3>Data</h3>
+          <h2>Data</h2>
           <span class="phase-legend" id="phase-legend"></span>
           <span class="muted small">Click a chart to jump there, drag to zoom, double-click to reset. Click a title to hide it.</span>
         </div>

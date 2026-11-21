@@ -260,7 +260,7 @@ function renderCompare() {
     return `<tr><td>${label}</td><td>${fmt(a, unit)}</td>${others.map((o) => `<td>${fmt(o, unit)}</td>`).join("")}${single ? diff || "<td></td>" : ""}<td class="unit">${cu(unit)}</td></tr>`;
   }).join("");
   const heads = cmps.map((c) => `<th><i class="sw" style="background:${c.color}"></i></th>`).join("");
-  $("cmp-table").innerHTML = `<tr><th>Metric</th><th>This</th>${heads}${single ? "<th>Δ</th>" : ""}<th></th></tr>${rows}`;
+  $("cmp-table").innerHTML = `<tr><th>Metric</th><th>This</th>${heads}${single ? "<th>Δ</th>" : ""}<th><span class="sr-only">Unit</span></th></tr>${rows}`;
   const notes = [...new Set(cmps.flatMap((c) => c.trace.notes))];
   if (cmps.some((c) => c.trace.path && c.trace.compass !== A!.compass)) notes.push("3D heading isn't aligned for comparisons without GPS or position data.");
   $("cmp-notes").innerHTML = notes.map((n) => `<div>${escapeHtml(n)}</div>`).join("");
@@ -348,7 +348,7 @@ function renderMetrics() {
     }
     return `<tr${m.note ? ` title="${escapeHtml(m.note)}"` : ""}><td>${escapeHtml(m.label)}</td><td>${fmt(m.site, m.unit)}</td><td>${fmt(m.device, m.unit)}</td><td>${diff}</td><td class="unit">${cu(m.unit)}</td></tr>`;
   });
-  $("metrics").innerHTML = `<tr><th>Metric</th><th>Site</th><th>Blue Raven</th><th>Δ</th><th></th></tr>${rows.join("")}`;
+  $("metrics").innerHTML = `<tr><th>Metric</th><th>Site</th><th>Blue Raven</th><th>Δ</th><th><span class="sr-only">Unit</span></th></tr>${rows.join("")}`;
 }
 
 // ---------- descent ----------
@@ -463,7 +463,7 @@ function renderFindings() {
   if (!A || !flight) return;
   const list = findFindings(flight, A);
   $("findings").innerHTML = list
-    .map((fd) => `<li class="${fd.level}"${fd.t !== undefined ? ` data-t="${fd.t}" title="Jump to T+${fd.t.toFixed(2)} s"` : ""}><div class="ft">${escapeHtml(fd.title)}${fd.t !== undefined ? `<span>T+${fd.t.toFixed(1)}</span>` : ""}</div><div class="fd">${escapeHtml(fd.detail)}</div></li>`)
+    .map((fd) => `<li class="${fd.level}"${fd.t !== undefined ? ` data-t="${fd.t}" title="Jump to T+${fd.t.toFixed(2)} s" tabindex="0"` : ""}><div class="ft">${escapeHtml(fd.title)}${fd.t !== undefined ? `<span>T+${fd.t.toFixed(1)}</span>` : ""}</div><div class="fd">${escapeHtml(fd.detail)}</div></li>`)
     .join("");
 }
 $("findings").addEventListener("click", (e) => {
@@ -540,7 +540,7 @@ function renderGps() {
     return `<tr${r.note ? ` title="${escapeHtml(r.note)}"` : ""}><td>${escapeHtml(r.label)}</td><td>${fmt(r.br, r.unit)}</td><td>${fmt(r.gps, r.unit)}</td><td>${diff}</td><td class="unit">${cu(r.unit)}</td></tr>`;
   });
   $("compare").className = "metrics cmp";
-  $("compare").innerHTML = `<tr><th>Metric</th><th>Blue Raven</th><th>GPS</th><th>Δ</th><th></th></tr>${rows.join("")}`;
+  $("compare").innerHTML = `<tr><th>Metric</th><th>Blue Raven</th><th>GPS</th><th>Δ</th><th><span class="sr-only">Unit</span></th></tr>${rows.join("")}`;
   const L = g.landing;
   const ll = `${L.lat.toFixed(6)}, ${L.lon.toFixed(6)}`;
   const q = `${L.lat.toFixed(6)},${L.lon.toFixed(6)}`;
@@ -613,7 +613,7 @@ function renderEvents() {
   $("events").innerHTML = A!.events
     .map((e, i) => {
       const alt = p.y[indexAt(p.t, e.t)];
-      return `<li data-t="${e.t}"><span class="num">${i < 9 ? i + 1 : ""}</span><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${show(alt, "ft")}</span><span class="t">T+${e.t.toFixed(2)} s</span></li>`;
+      return `<li data-t="${e.t}" tabindex="0"><span class="num">${i < 9 ? i + 1 : ""}</span><i style="background:${e.color}"></i>${escapeHtml(e.label)}<span class="alt">${show(alt, "ft")}</span><span class="t">T+${e.t.toFixed(2)} s</span></li>`;
     })
     .join("");
 }
@@ -675,7 +675,7 @@ function renderSettings() {
       .join("");
     const delay = s.options["Use_Delay"]?.[ch] === "TRUE" ? `, ${vals.delay} s delay` : "";
     const when = fire ? `fired T+${fire.t.toFixed(2)} s` : "did not fire";
-    return `<div class="settings-ch"><h4>${ch} <span class="muted small">(${when}${delay})</span></h4>${chips || '<span class="muted small">no conditions</span>'}</div>`;
+    return `<div class="settings-ch"><h3>${ch} <span class="muted small">(${when}${delay})</span></h3>${chips || '<span class="muted small">no conditions</span>'}</div>`;
   }).join("");
   $("settings").innerHTML = `<div class="muted small">All conditions must be true to fire. Green/red shows the logged state in the 0.15 s before each fire.</div>${html}`;
 }
@@ -726,7 +726,7 @@ function renderMarks() {
     .map((m) => `<span title="${escapeHtml(tLabel(m.t))}: ${escapeHtml(m.text)}" style="left:${((m.t - A!.tStart) / span) * 100}%"></span>`)
     .join("");
   $("marks").innerHTML = marks.length
-    ? marks.map((m, i) => `<li data-i="${i}" title="Jump to ${tLabel(m.t)}"><span class="mt">${tLabel(m.t)}</span><span class="mx">${escapeHtml(m.text)}</span><button class="del" data-del="${i}" title="Delete note" aria-label="Delete note">×</button></li>`).join("")
+    ? marks.map((m, i) => `<li data-i="${i}" title="Jump to ${tLabel(m.t)}" tabindex="0"><span class="mt">${tLabel(m.t)}</span><span class="mx">${escapeHtml(m.text)}</span><button class="del" data-del="${i}" title="Delete note" aria-label="Delete note">×</button></li>`).join("")
     : '<li class="empty-note">Pause where something happens, type what you saw and press Add. Notes show as yellow marks on the timeline.</li>';
   updateMarkPlaceholder();
 }
@@ -970,8 +970,19 @@ function setCam(mode: CameraMode) {
   }
   replay.setCameraMode(mode);
 }
+// keyboard for list rows that act as buttons (events, findings, notes): Enter or Space jumps
+document.addEventListener("keydown", (e) => {
+  const row = (e.target as HTMLElement).closest?.('li[tabindex="0"]') as HTMLElement | null;
+  if (!row || (e.key !== "Enter" && e.key !== " ") || e.target !== row) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  row.click();
+}, true);
+
 document.addEventListener("keydown", (e) => {
   const tgt = e.target as HTMLElement;
+  // Space and Enter belong to whatever control has focus, not to play/pause
+  if ((e.key === " " || e.key === "Enter") && tgt.closest?.('button, a, [role="button"], summary, li[tabindex="0"]')) return;
   const typing = (tgt instanceof HTMLInputElement && tgt.type !== "range") || tgt instanceof HTMLTextAreaElement || tgt instanceof HTMLSelectElement;
   if (typing || e.ctrlKey || e.metaKey || e.altKey || !A) return;
   if (document.querySelector("dialog[open]")) return;
@@ -1151,7 +1162,7 @@ async function buildReport() {
     .join("");
   const g = A.gps;
   const gpsBlock = g
-    ? `<section><h2>Blue Raven vs GPS</h2><table><tr><th>Metric</th><th class="n">Blue Raven</th><th class="n">GPS</th><th></th></tr>${g.rows
+    ? `<section><h2>Blue Raven vs GPS</h2><table><tr><th>Metric</th><th class="n">Blue Raven</th><th class="n">GPS</th><th><span class="sr-only">Unit</span></th></tr>${g.rows
         .map((r) => `<tr><td>${e(r.label)}</td><td class="n">${fmt(r.br, r.unit)}</td><td class="n">${fmt(r.gps, r.unit)}</td><td>${e(cu(r.unit))}</td></tr>`)
         .join("")}</table><p>Landing ${show(g.landing.distance, "ft")} from the pad at ${g.landing.bearing.toFixed(0)}°, ${g.landing.lat.toFixed(5)}, ${g.landing.lon.toFixed(5)}.</p></section>`
     : "";
@@ -1176,7 +1187,7 @@ async function buildReport() {
     : "";
   const mine = keyNumbersOf(A);
   const cmpBlock = cmps.length
-    ? `<section><h2>Comparison</h2><p>Lined up at ${ALIGN_NAME[alignAt]}${cmps.some((c) => c.offset) ? `; shifts: ${cmps.map((c) => `${e(c.trace.name)} ${c.offset >= 0 ? "+" : ""}${c.offset.toFixed(2)} s`).join(", ")}` : ""}.</p><table><tr><th>Metric</th><th class="n">This flight</th>${cmps.map((c) => `<th class="n">${e(c.trace.kind === "sim" ? "Sim: " + c.trace.name : c.trace.name)}</th>`).join("")}<th></th></tr>${KEY_ROWS.map(
+    ? `<section><h2>Comparison</h2><p>Lined up at ${ALIGN_NAME[alignAt]}${cmps.some((c) => c.offset) ? `; shifts: ${cmps.map((c) => `${e(c.trace.name)} ${c.offset >= 0 ? "+" : ""}${c.offset.toFixed(2)} s`).join(", ")}` : ""}.</p><table><tr><th>Metric</th><th class="n">This flight</th>${cmps.map((c) => `<th class="n">${e(c.trace.kind === "sim" ? "Sim: " + c.trace.name : c.trace.name)}</th>`).join("")}<th><span class="sr-only">Unit</span></th></tr>${KEY_ROWS.map(
         ({ k, label, unit }) => `<tr><td>${label}</td><td class="n">${fmt(mine[k], unit)}</td>${cmps.map((c) => `<td class="n">${fmt(c.trace.key[k], unit)}</td>`).join("")}<td>${cu(unit)}</td></tr>`,
       ).join("")}</table></section>`
     : "";
@@ -1187,9 +1198,9 @@ async function buildReport() {
     <div class="meta">${e(dateStr)}${flight.summary?.raw["Flight number"] ? `, Blue Raven flight ${e(flight.summary.raw["Flight number"])}` : ""}${flight.gps ? ", with GPS" : ""}</div>
     ${entry?.notes ? `<div class="notes">${e(entry.notes)}</div>` : ""}
     <div class="cols">
-      <section><h2>Flight summary</h2><table><tr><th>Metric</th><th class="n">Site</th><th class="n">Blue Raven</th><th></th></tr>${metricRows}</table></section>
+      <section><h2>Flight summary</h2><table><tr><th>Metric</th><th class="n">Site</th><th class="n">Blue Raven</th><th><span class="sr-only">Unit</span></th></tr>${metricRows}</table></section>
       <div>
-        <section><h2>Recovery check</h2><table><tr><th>Item</th><th class="n">Value</th><th class="n">Limit</th><th></th></tr>${recRows}</table></section>
+        <section><h2>Recovery check</h2><table><tr><th>Item</th><th class="n">Value</th><th class="n">Limit</th><th><span class="sr-only">Unit</span></th></tr>${recRows}</table></section>
         <section><h2>Events</h2><table><tr><th>Event</th><th class="n">Time</th><th class="n">Altitude</th></tr>${evRows}</table></section>
       </div>
     </div>
@@ -1345,7 +1356,7 @@ async function renderLibrary() {
   } else if (list.length === 0) {
     el.innerHTML = '<div class="lib-empty">Nothing matches. Try fewer words or show flights and sims.</div>';
   } else {
-    el.innerHTML = `<table class="lib-table"><tr><th>Date</th><th>Name</th><th style="text-align:right">Apogee</th><th style="text-align:right">Flight time</th><th style="text-align:right">Drift</th><th>Notes</th><th></th></tr>${list
+    el.innerHTML = `<table class="lib-table"><tr><th>Date</th><th>Name</th><th style="text-align:right">Apogee</th><th style="text-align:right">Flight time</th><th style="text-align:right">Drift</th><th>Notes</th><th><span class="sr-only">Unit</span></th></tr>${list
       .map((e) => `<tr class="${e.id === currentEntryId ? "current" : ""}">
         <td>${escapeHtml(e.date || "-")}</td>
         <td>${hl(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}
@@ -1423,7 +1434,7 @@ async function renderTrends() {
     const d = unit === "g" || unit === "s" ? 2 : 0;
     return `<tr><td><i class="sw" style="background:${TREND_COLORS[i % TREND_COLORS.length]}"></i> ${escapeHtml(g)}</td><td>${ys.length}</td><td>${mean.toFixed(d)}</td><td>${ys.length > 1 ? sd.toFixed(d) : "-"}</td><td>${Math.min(...ys).toFixed(d)}</td><td>${Math.max(...ys).toFixed(d)}</td><td class="unit">${cu(unit)}</td></tr>`;
   }).join("");
-  $("tr-table").innerHTML = `<tr><th>Group</th><th>Flights</th><th>Mean</th><th>Spread (1σ)</th><th>Min</th><th>Max</th><th></th></tr>${rows}`;
+  $("tr-table").innerHTML = `<tr><th>Group</th><th>Flights</th><th>Mean</th><th>Spread (1σ)</th><th>Min</th><th>Max</th><th><span class="sr-only">Unit</span></th></tr>${rows}`;
 }
 document.querySelectorAll<HTMLButtonElement>("[data-libview]").forEach((b) =>
   b.addEventListener("click", () => {
