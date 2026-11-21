@@ -22,9 +22,10 @@
         <button class="btn" id="lib-open">Library</button>
         <button class="btn" id="save-open" hidden>Save flight</button>
         <button class="btn" id="report-open" hidden>Print report</button>
+        <button class="btn" id="share-open" hidden title="Download this flight as one file you can send to a teammate">Share file</button>
         <label class="btn primary">
           Open flight files
-          <input id="file-input" type="file" multiple accept=".csv,.xlsx,.kml" hidden />
+          <input id="file-input" type="file" multiple accept=".csv,.xlsx,.kml,.zip" hidden />
         </label>
         <button class="btn" data-sample="SN0614">Sample: SN0614 + GPS (bullet bill)</button>
         <button class="btn" data-sample="SN1742">Sample: SN1742</button>
@@ -70,10 +71,11 @@
             <div class="dz-icon">⇪</div>
             <h2>Drop your Blue Raven files here</h2>
             <p>Select the <b>HR</b>, <b>LR</b> and <b>summary</b> CSVs together. The <b>deploy settings</b> XLSX is optional.</p>
+            <p>Got a <b>.flight.zip</b> from a teammate? Drop it here to open it and add it to your library.</p>
             <p>Add the <b>Featherweight GPS tracker</b> CSV (and its summary) from the same flight to get true north and the real descent drift.</p>
             <p class="muted">Everything is processed in your browser. Nothing is uploaded.</p>
             <div class="dz-actions">
-              <label class="btn primary">Choose files<input id="file-input-2" type="file" multiple accept=".csv,.xlsx,.kml" hidden /></label>
+              <label class="btn primary">Choose files<input id="file-input-2" type="file" multiple accept=".csv,.xlsx,.kml,.zip" hidden /></label>
               <button class="btn" data-sample="SN0614">Load sample flight</button>
             </div>
           </div>

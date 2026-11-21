@@ -71,9 +71,9 @@ export async function storageUse(): Promise<{ used: number; quota: number } | nu
 
 // ---------- backup ----------
 
-/** zip layout: <id>/entry.json (metadata) + <id>/<file name> */
-export async function exportBackup(): Promise<Blob> {
-  const entries = await listEntries();
+/** zip layout: <id>/entry.json (metadata) + <id>/<file name>. Pass entries to export only those. */
+export async function exportBackup(only?: LibraryEntry[]): Promise<Blob> {
+  const entries = only ?? (await listEntries());
   const files: Record<string, Uint8Array> = {};
   for (const e of entries) {
     const { files: fs, ...meta } = e;
@@ -84,10 +84,10 @@ export async function exportBackup(): Promise<Blob> {
   return new Blob([zipped.buffer as ArrayBuffer], { type: "application/zip" });
 }
 
-/** Import a backup zip; entries with an existing id are replaced. Returns how many were imported. */
-export async function importBackup(buf: ArrayBuffer): Promise<number> {
+/** Import a backup or shared-flight zip; entries with an existing id are replaced. Returns the imported entries. */
+export async function importBackup(buf: ArrayBuffer): Promise<LibraryEntry[]> {
   const all = unzipSync(new Uint8Array(buf));
-  let n = 0;
+  const imported: LibraryEntry[] = [];
   for (const path of Object.keys(all).filter((p) => p.endsWith("/entry.json"))) {
     const dir = path.slice(0, -"entry.json".length);
     const meta = JSON.parse(strFromU8(all[path])) as Omit<LibraryEntry, "files"> & { fileNames: string[] };
@@ -98,8 +98,10 @@ export async function importBackup(buf: ArrayBuffer): Promise<number> {
       files.push(/\.xlsx$/i.test(name) ? { name, buffer: data.slice().buffer as ArrayBuffer } : { name, text: strFromU8(data) });
     }
     const { fileNames: _ignored, ...rest } = meta;
-    await putEntry({ ...rest, files });
-    n++;
+    const entry = { ...rest, files };
+    await putEntry(entry);
+    imported.push(entry);
   }
-  return n;
+  if (imported.length === 0) throw new Error("no flights found in the zip");
+  return imported;
 }

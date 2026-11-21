@@ -80,7 +80,8 @@ $("sat-toggle").addEventListener("click", () => {
 }
 
 // ---------- loading ----------
-async function loadFiles(files: InFile[], entryId?: string) {
+let currentEntryName: string | undefined;
+async function loadFiles(files: InFile[], entryId?: string, entryName?: string) {
   const warn: string[] = [];
   setLoading("Reading flight files");
   try {
@@ -95,9 +96,11 @@ async function loadFiles(files: InFile[], entryId?: string) {
     A = a;
     lastFiles = files;
     currentEntryId = entryId;
+    currentEntryName = entryName;
     if (!entryId) recovery = loadDefaultRecovery();
     $("save-open").hidden = false;
     $("report-open").hidden = false;
+    $("share-open").hidden = false;
     $("save-open").textContent = entryId ? "Edit saved flight" : "Save flight";
     showFlight();
   } catch (e) {
@@ -112,12 +115,28 @@ type InFile = { name: string; text?: string; buffer?: ArrayBuffer };
 
 async function readList(list: FileList | File[]): Promise<InFile[]> {
   return Promise.all(
-    Array.from(list).map(async (f) => (/\.xlsx$/i.test(f.name) ? { name: f.name, buffer: await f.arrayBuffer() } : { name: f.name, text: await f.text() })),
+    Array.from(list).map(async (f) => (/\.(xlsx|zip)$/i.test(f.name) ? { name: f.name, buffer: await f.arrayBuffer() } : { name: f.name, text: await f.text() })),
   );
 }
 
 async function fromFileList(list: FileList | File[]) {
   const files = await readList(list);
+  // a shared flight or library backup: add it to the library and open the first flight
+  const zip = files.find((f) => f.buffer && /\.zip$/i.test(f.name));
+  if (zip) {
+    try {
+      const entries = await importBackup(zip.buffer!);
+      const first = entries.find((e) => e.kind === "flight");
+      if (first) {
+        recovery = first.recovery ?? loadDefaultRecovery();
+        await loadFiles(first.files, first.id, first.name);
+      }
+      if (entries.length > 1 || !first) showWarnings([`Added ${entries.length} entr${entries.length === 1 ? "y" : "ies"} to your library.`]);
+    } catch (e) {
+      showWarnings([`${zip.name}: not a Data Compare flight file (${(e as Error).message}).`]);
+    }
+    return;
+  }
   // an OpenRocket export dropped onto a loaded flight is a comparison, not a new flight
   if (flight && files.length > 0 && files.every((f) => f.text && isOpenRocket(f.text))) {
     await loadCompare(files);
@@ -247,9 +266,7 @@ function showFlight() {
   if (!A || !flight) return;
   app.classList.remove("empty");
   const lr = flight.lr!;
-  const fdate = flightDate();
-  const fnum = flight.summary?.raw["Flight number"];
-  $("flight-name").textContent = `${flight.gps?.name ?? flight.name}${fdate ? `, ${new Date(fdate + "T12:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}` : ""}${fnum ? `, Blue Raven flight ${fnum}` : ""}`;
+  showFlightTitle();
   scrub.min = String(A.tStart);
   scrub.max = String(A.tEnd);
   scrub.step = "0.002";
@@ -269,6 +286,12 @@ function showFlight() {
   renderScrubEvents();
   pause();
   seek(Math.max(A.tStart, -1));
+}
+function showFlightTitle() {
+  if (!flight) return;
+  const fdate = flightDate();
+  const fnum = flight.summary?.raw["Flight number"];
+  $("flight-name").textContent = `${currentEntryName ?? flight.gps?.name ?? flight.name}${fdate ? `, ${new Date(fdate + "T12:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}` : ""}${fnum ? `, Blue Raven flight ${fnum}` : ""}`;
 }
 
 function fmt(v: number | null | undefined, unit: string) {
@@ -802,6 +825,32 @@ async function buildReport() {
 }
 $("report-open").addEventListener("click", () => buildReport());
 
+// ---------- share one flight ----------
+const fileSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "flight";
+function downloadBlob(name: string, blob: Blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+async function shareEntry(e: LibraryEntry) {
+  downloadBlob(`${fileSlug(e.name)}.flight.zip`, await exportBackup([e]));
+}
+$("share-open").addEventListener("click", async () => {
+  if (!A || !flight) return;
+  // share the saved version if there is one (keeps name, notes, tags), otherwise the loaded files
+  const saved = currentEntryId ? await getEntry(currentEntryId) : undefined;
+  const k = keyNumbersOf(A);
+  const e: LibraryEntry = saved ?? {
+    id: newId(), kind: "flight", name: flight.gps?.name ?? flight.name, date: flightDate(), notes: "",
+    savedAt: new Date().toISOString(),
+    stats: { apogee: k.apogee, flightTime: k.flightTime, drift: k.drift, maxVel: k.maxVel, hasGps: !!flight.gps },
+    files: lastFiles, recovery,
+  };
+  await shareEntry(e);
+});
+
 // ---------- library (saved in this browser) ----------
 const saveDlg = $<HTMLDialogElement>("save-dialog");
 const libDlg = $<HTMLDialogElement>("lib-dialog");
@@ -871,6 +920,8 @@ $("save-form").addEventListener("submit", async (e) => {
       }
     }
     currentEntryId = entry.id;
+    currentEntryName = entry.name;
+    showFlightTitle();
     $("save-open").textContent = "Edit saved flight";
     requestPersistence();
     showWarnings(A.warnings);
@@ -922,6 +973,7 @@ async function renderLibrary() {
         <td class="acts">
           ${e.kind === "flight" ? `<button class="btn small-btn" data-act="open" data-id="${e.id}">Open</button>` : ""}
           <button class="btn small-btn" data-act="cmp" data-id="${e.id}" ${!A || e.id === currentEntryId ? "disabled" : ""}>Compare</button>
+          <button class="btn small-btn" data-act="share" data-id="${e.id}" title="Download as one file to send to a teammate">Share</button>
           <button class="btn small-btn danger" data-act="del" data-id="${e.id}">Delete</button>
         </td></tr>`)
       .join("")}</table>`;
@@ -944,10 +996,12 @@ $("lib-list").addEventListener("click", async (ev) => {
     libDlg.close();
     setBusy(true);
     recovery = entry.recovery ?? loadDefaultRecovery();
-    try { await loadFiles(entry.files, entry.id); } finally { setBusy(false); }
+    try { await loadFiles(entry.files, entry.id, entry.name); } finally { setBusy(false); }
   } else if (b.dataset.act === "cmp") {
     libDlg.close();
     await loadCompare(entry.files);
+  } else if (b.dataset.act === "share") {
+    await shareEntry(entry);
   } else if (b.dataset.act === "del") {
     if (!confirm(`Delete "${entry.name}" from the library? This cannot be undone (unless it is in a backup).`)) return;
     await deleteEntry(entry.id);
@@ -973,7 +1027,7 @@ $("lib-export").addEventListener("click", async () => {
     inp.value = "";
     if (!f) return;
     try {
-      const n = await importBackup(await f.arrayBuffer());
+      const n = (await importBackup(await f.arrayBuffer())).length;
       await renderLibrary();
       $("lib-usage").textContent = `Imported ${n} entr${n === 1 ? "y" : "ies"}. ` + $("lib-usage").textContent;
     } catch (err) {
