@@ -5,6 +5,7 @@ import { checkSettings } from "./settingsCheck";
 import { COND_MAP } from "./condLabels";
 import { getVehicle, vehicleKeyOf, vehicleNames } from "./vehicle";
 import { $, escapeHtml } from "./ui";
+import { listEntries, type LibraryEntry } from "./library";
 
 type InFile = { name: string; text?: string; buffer?: ArrayBuffer };
 let showWarnings: (w: string[]) => void = () => undefined;
@@ -37,7 +38,37 @@ export function preflight(file: InFile) {
   $<HTMLDialogElement>("pre-dialog").showModal();
 }
 $("pre-close").addEventListener("click", () => $<HTMLDialogElement>("pre-dialog").close());
-$("pre-print").addEventListener("click", () => {
+/** the most recent saved flight of this vehicle, for the RSO table */
+async function lastFlightOf(vname: string): Promise<LibraryEntry | null> {
+  if (!vname) return null;
+  const key = vehicleKeyOf(vname);
+  try {
+    const all = (await listEntries()).filter((x) => x.kind === "flight" && vehicleKeyOf(x.vehicle) === key);
+    all.sort((a, b) => `${b.date || ""}|${b.savedAt}`.localeCompare(`${a.date || ""}|${a.savedAt}`));
+    return all[0] ?? null;
+  } catch { return null; }
+}
+function lastFlightBlock(x: LibraryEntry | null, vname: string): string {
+  const e = escapeHtml;
+  if (!vname) return "";
+  if (!x) return `<section><h2>Last flight of this vehicle</h2><p>No saved flight of ${e(vname)} in this browser's library.</p></section>`;
+  const st = x.stats;
+  const n = (v: number | null | undefined, d: number, u: string) => (v === null || v === undefined || !Number.isFinite(v) ? "-" : `${v.toFixed(d)} ${u}`);
+  const sl = st.slPass != null && st.slOver
+    ? `${st.slPass} pass${st.slOver.length ? `, over the limit: ${e(st.slOver.join(", "))}` : ", none over"}`
+    : "not stored (refresh stored numbers in the library)";
+  const notes = x.notes ? (x.notes.length > 300 ? x.notes.slice(0, 300) + "..." : x.notes) : "";
+  return `<section><h2>Last flight of this vehicle</h2><table>
+    <tr><td>Flight</td><td class="n">${e(x.name)}${x.date ? `, ${e(x.date)}` : ""}${x.motor ? `, ${e(x.motor)}` : ""}</td></tr>
+    <tr><td>Apogee</td><td class="n">${n(st.apogee, 0, "ft")}</td></tr>
+    <tr><td>Main deployed at</td><td class="n">${n(st.mainAlt, 0, "ft")}</td></tr>
+    <tr><td>Drogue / main descent</td><td class="n">${n(st.drogueRate === null || st.drogueRate === undefined ? null : Math.abs(st.drogueRate), 0, "ft/s")} / ${n(st.mainRate === null || st.mainRate === undefined ? null : Math.abs(st.mainRate), 0, "ft/s")}</td></tr>
+    <tr><td>Drift</td><td class="n">${n(st.drift, 0, "ft")}</td></tr>
+    <tr><td>Student Launch checks</td><td class="n">${sl}</td></tr>
+    ${notes ? `<tr><td>Notes</td><td>${e(notes)}</td></tr>` : ""}
+  </table></section>`;
+}
+$("pre-print").addEventListener("click", async () => {
   if (!preState) return;
   const { s, name } = preState;
   const e = escapeHtml;
@@ -47,6 +78,7 @@ $("pre-print").addEventListener("click", () => {
   const v = getVehicle(vehicleKeyOf(vname));
   const lbs = (x: number | null) => (x === null ? "________" : `${x.toFixed(2)} lb`);
   const issues = checkSettings(s);
+  const last = lastFlightBlock(await lastFlightOf(vname), vname);
   const chans = CHANNELS.map((ch: Channel) => {
     const vals: Record<string, number> = {};
     for (const [k, val] of Object.entries(s.values)) vals[k] = val[ch];
@@ -74,6 +106,7 @@ $("pre-print").addEventListener("click", () => {
         <tr><td>RSO initials ______</td><td class="chk">☐</td></tr>
       </table></section>
     </div>
+    ${last}
     <section><h2>Deployment channels</h2><table><tr><th>Channel</th><th>Armed</th><th>Delay</th><th>Fires when all are true</th><th>OK</th></tr>${chans}</table></section>
     <section><h2>Settings check</h2>${issues.length ? `<table>${issues.map((i) => `<tr><td class="${i.level === "warn" ? "fail" : ""}">${i.level === "warn" ? "Warning" : "Note"}</td><td><b>${e(i.title)}</b>. ${e(i.detail)}</td></tr>`).join("")}</table>` : "<p>No common setup problems found.</p>"}</section>
     <div class="foot">Printed ${new Date().toLocaleString()} from Data Compare. Check against the altimeter itself before flight.</div>`;
