@@ -1,0 +1,32 @@
+{
+  "name": "data-compare",
+  "version": "0.1.0",
+  "description": "Flight data analysis, 3D replay and comparison for rocketry altimeters (Blue Raven first)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dreveron10/data-compare.git"
+  },
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/dreveron10/data-compare/issues"
+  },
+  "homepage": "https://github.com/dreveron10/data-compare#readme",
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "three": "^0.187.0",
+    "uplot": "^1.6.32"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "private": true,
+  "type": "module"
+}
