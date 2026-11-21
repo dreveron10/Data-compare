@@ -278,6 +278,8 @@ function showFlight() {
   renderCompare();
   $("lg-x").textContent = A.compass ? "East" : "Downrange";
   $("lg-z").textContent = A.compass ? "North" : "Crossrange";
+  $("video-panel").hidden = false;
+  renderVideoState();
   renderFindings();
   renderMetrics();
   renderRecovery();
@@ -597,6 +599,100 @@ function gpsHud(time: number) {
 }
 
 // ---------- playback ----------
+// ---------- onboard video sync ----------
+const video = $<HTMLVideoElement>("video");
+let videoLift: number | null = null; // video time (s) at liftoff
+let videoUrl: string | null = null;
+let videoSyncing = false; // true while we move the video ourselves
+const liftT = () => A?.events.find((e) => e.key === "liftoff")?.t ?? 0;
+function videoTimeFor(flightT: number) { return videoLift === null ? null : videoLift + (flightT - liftT()); }
+function syncVideo(force = false) {
+  const vt = videoTimeFor(t);
+  if (vt === null || !video.src) return;
+  const inRange = vt >= 0 && (!video.duration || vt <= video.duration);
+  if (!inRange) { if (!video.paused) video.pause(); return; }
+  if (force || Math.abs(video.currentTime - vt) > (playing ? 0.25 : 0.04)) {
+    videoSyncing = true;
+    video.currentTime = vt;
+  }
+  if (playing) {
+    video.playbackRate = Math.max(0.0625, parseFloat(speedSel.value));
+    if (video.paused) video.play().catch(() => undefined);
+  } else if (!video.paused) video.pause();
+}
+function renderVideoState() {
+  const has = !!video.src;
+  $("video-wrap").hidden = !has;
+  for (const id of ["video-mark", "video-pip", "video-close"]) $(id).hidden = !has;
+  for (const id of ["video-nudge-m", "video-nudge-p"]) $(id).hidden = !has || videoLift === null;
+  video.controls = videoLift === null; // before syncing, use the video's own controls to find liftoff
+  $("video-sub").innerHTML = !has
+    ? "Load a flight video (RunCam, phone) to play it in sync with the replay. It stays on your computer."
+    : videoLift === null
+      ? "Play or scrub the video to the frame where the rocket leaves the rail, then press <b>Liftoff is at this frame</b>."
+      : `Synced: liftoff is at ${videoLift.toFixed(2)} s in the video. The timeline now drives it.`;
+}
+$<HTMLInputElement>("video-input").addEventListener("change", (e) => {
+  const f = (e.target as HTMLInputElement).files?.[0];
+  if (!f) return;
+  if (videoUrl) URL.revokeObjectURL(videoUrl);
+  videoUrl = URL.createObjectURL(f);
+  video.src = videoUrl;
+  // reuse a sync saved for this file name on this flight
+  const saved = (() => { try { return JSON.parse(localStorage.getItem("dc.videosync") ?? "{}"); } catch { return {}; } })();
+  const key = `${currentEntryId ?? flight?.name}|${f.name}`;
+  videoLift = typeof saved[key] === "number" ? saved[key] : null;
+  video.dataset.key = key;
+  renderVideoState();
+  if (videoLift !== null) video.addEventListener("loadedmetadata", () => syncVideo(true), { once: true });
+  (e.target as HTMLInputElement).value = "";
+});
+$("video-mark").addEventListener("click", () => {
+  if (!A) return;
+  pause();
+  seek(liftT());
+  videoLift = video.currentTime;
+  try {
+    const saved = JSON.parse(localStorage.getItem("dc.videosync") ?? "{}");
+    saved[video.dataset.key ?? ""] = videoLift;
+    localStorage.setItem("dc.videosync", JSON.stringify(saved));
+  } catch { /* ignore */ }
+  renderVideoState();
+});
+for (const [id, d] of [["video-nudge-m", -0.1], ["video-nudge-p", 0.1]] as const) {
+  $(id).addEventListener("click", () => {
+    if (videoLift === null) return;
+    videoLift += d;
+    renderVideoState();
+    syncVideo(true);
+  });
+}
+$("video-pip").addEventListener("click", () => {
+  const wrap = $("video-wrap");
+  const pip = wrap.classList.toggle("pip");
+  // dock inside the 3D view, or put back in the sidebar panel
+  if (pip) document.querySelector(".stage")!.appendChild(wrap);
+  else $("video-sub").after(wrap);
+  $("video-pip").textContent = pip ? "Back to sidebar" : "Show over 3D";
+});
+$("video-close").addEventListener("click", () => {
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+  if (videoUrl) URL.revokeObjectURL(videoUrl);
+  videoUrl = null;
+  videoLift = null;
+  $("video-wrap").classList.remove("pip");
+  $("video-sub").after($("video-wrap"));
+  $("video-pip").textContent = "Show over 3D";
+  renderVideoState();
+});
+// scrubbing the video itself (after sync) moves the flight
+video.addEventListener("seeked", () => {
+  if (videoSyncing) { videoSyncing = false; return; }
+  if (videoLift !== null && !playing) seek(liftT() + (video.currentTime - videoLift));
+});
+
 function seek(time: number) {
   if (!A) return;
   t = Math.min(A.tEnd, Math.max(A.tStart, time));
@@ -604,6 +700,7 @@ function seek(time: number) {
   $("time").textContent = `T${t < 0 ? "−" : "+"}${Math.abs(t).toFixed(2)}`;
   replay.setTime(t);
   updateHud(t);
+  syncVideo();
   const now = performance.now();
   if (!playing || now - lastChartUpdate > 66) {
     charts.setPlayhead(t);
@@ -617,11 +714,13 @@ function play() {
   playing = true;
   playBtn.textContent = "❚❚";
   lastFrame = performance.now();
+  syncVideo(true);
   requestAnimationFrame(tick);
 }
 function pause() {
   playing = false;
   playBtn.textContent = "▶";
+  if (!video.paused) video.pause();
   if (A) charts.setPlayhead(t);
 }
 function tick(now: number) {

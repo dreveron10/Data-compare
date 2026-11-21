@@ -98,6 +98,21 @@
       </section>
 
       <aside class="side">
+        <div class="panel" id="video-panel" hidden>
+          <h3>Onboard video</h3>
+          <div class="muted small" id="video-sub">Load a flight video (RunCam, phone) to play it in sync with the replay. It stays on your computer.</div>
+          <div class="video-wrap" id="video-wrap" hidden>
+            <video id="video" playsinline muted controls preload="auto"></video>
+          </div>
+          <div class="cmp-actions">
+            <label class="btn small-btn">Open video<input id="video-input" type="file" accept="video/*" hidden /></label>
+            <button class="btn small-btn" id="video-mark" hidden title="Pause the video on the frame where the rocket leaves the rail, then press this">Liftoff is at this frame</button>
+            <button class="btn small-btn" id="video-nudge-m" hidden title="Video 0.1 s earlier">−0.1 s</button>
+            <button class="btn small-btn" id="video-nudge-p" hidden title="Video 0.1 s later">+0.1 s</button>
+            <button class="btn small-btn" id="video-pip" hidden>Show over 3D</button>
+            <button class="btn small-btn" id="video-close" hidden>Close</button>
+          </div>
+        </div>
         <div class="panel" id="find-panel" hidden>
           <h3>Findings</h3>
           <ul class="findings" id="findings"></ul>

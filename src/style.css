@@ -391,3 +391,10 @@ mark { background: rgba(255, 122, 26, 0.28); color: inherit; border-radius: 2px;
 .drop-hint { display: none; font-size: 18px; font-weight: 600; padding: 40px; border: 2px dashed var(--signal); border-radius: 16px; background: rgba(13, 21, 36, 0.85); }
 main:not(.empty) .dropzone.drag .welcome { display: none; }
 main:not(.empty) .dropzone.drag .drop-hint { display: block; }
+
+/* onboard video */
+.video-wrap { margin-top: 8px; border-radius: 10px; overflow: hidden; background: #000; }
+.video-wrap video { width: 100%; display: block; max-height: 260px; }
+.video-wrap.pip { position: absolute; left: 14px; bottom: 56px; margin: 0; width: min(380px, 40%); z-index: 6; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5); border: 1px solid var(--line); }
+.video-wrap.pip video { max-height: none; }
+#video-sub b { color: var(--signal); font-weight: 600; }
