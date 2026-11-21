@@ -2133,6 +2133,10 @@ $("lib-log").addEventListener("click", () => {
   downloadBlob(`flight-log-${new Date().toISOString().slice(0, 10)}.csv`, new Blob(["\ufeff" + csv], { type: "text/csv" }));
 });
 
+/** a vehicle, motor or tag chip that filters the library to it when clicked */
+function chipBtn(text: string, kind: string, hl: (x: string) => string, extra = "") {
+  return `<button type="button" class="chipline ${extra}" data-filter="${escapeHtml(text)}" title="Show only flights with this ${kind}" aria-label="Show only flights with ${kind} ${escapeHtml(text)}">${hl(text)}</button>`;
+}
 /** Student Launch tally saved with the flight (flights saved before this existed show nothing) */
 function slChip(e: LibraryEntry) {
   const p = e.stats.slPass, over = e.stats.slOver;
@@ -2175,7 +2179,7 @@ async function renderLibrary() {
         <td class="pick"><input type="checkbox" data-pick="${e.id}" ${libSel.includes(e.id) ? "checked" : ""} aria-label="Select ${escapeHtml(e.name)}" /></td>
         <td>${escapeHtml(e.date || "-")}</td>
         <td>${hl(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}${slChip(e)}
-          <div class="chips">${e.vehicle ? `<span class="chipline">${hl(e.vehicle)}</span>` : ""}${e.motor ? `<span class="chipline">${hl(e.motor)}</span>` : ""}${(e.tags ?? []).map((tg) => `<span class="chipline tagc">${hl(tg)}</span>`).join("")}</div></td>
+          <div class="chips">${e.vehicle ? chipBtn(e.vehicle, "vehicle", hl) : ""}${e.motor ? chipBtn(e.motor, "motor", hl) : ""}${(e.tags ?? []).map((tg) => chipBtn(tg, "tag", hl, "tagc")).join("")}</div></td>
         <td class="num">${show(e.stats.apogee, "ft")}</td>
         <td class="num">${num(e.stats.flightTime, 1)} s</td>
         <td class="num">${show(e.stats.drift, "ft")}</td>
@@ -2289,6 +2293,14 @@ $("tour-again").addEventListener("click", () => {
 });
 aboutDlg.addEventListener("click", (e) => { if (e.target === aboutDlg) aboutDlg.close(); });
 $("lib-list").addEventListener("click", async (ev) => {
+  const chip = (ev.target as HTMLElement).closest("button[data-filter]") as HTMLButtonElement | null;
+  if (chip) {
+    const box = $<HTMLInputElement>("lib-search");
+    box.value = box.value.trim().toLowerCase() === chip.dataset.filter!.toLowerCase() ? "" : chip.dataset.filter!;
+    await renderLibrary();
+    box.focus();
+    return;
+  }
   const pick = (ev.target as HTMLElement).closest("input[data-pick]") as HTMLInputElement | null;
   if (pick) {
     const id = pick.dataset.pick!;

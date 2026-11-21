@@ -661,3 +661,5 @@ table.chute td, table.chute th { font-size: 13px; white-space: nowrap; }
 .metrics.redund-t td:first-child { white-space: normal; }
 .metrics.redund-t tr.flag td { color: var(--bad); }
 .cmp-item label.same { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+button.chipline { border: 1px solid transparent; font: inherit; font-size: 11px; cursor: pointer; line-height: 1.5; }
+button.chipline:hover { border-color: var(--line); color: var(--ink, inherit); }
