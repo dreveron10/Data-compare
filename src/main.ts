@@ -633,6 +633,18 @@ function renderCoast(rebuildInputs = true) {
   }, [order.map((i) => d.mach[i]), order.map((i) => d.cd[i])], host);
 }
 // ---------- rail exit ----------
+function liftoffHtml(th: { t: number[]; thrustLbf: number[] }, liftoffLb: number): string {
+  // thrust-to-weight over the first 0.3 s of motion, and how long thrust took to come up
+  const t0 = th.t[0];
+  const early = th.thrustLbf.filter((_, i) => th.t[i] - t0 <= 0.3);
+  const avg = early.reduce((a, b) => a + b, 0) / Math.max(1, early.length);
+  const peak = Math.max(...th.thrustLbf);
+  const i90 = th.thrustLbf.findIndex((x) => x >= 0.9 * peak);
+  const tw = avg / liftoffLb;
+  return `<div><span class="k">Liftoff thrust-to-weight</span><span class="v">${tw.toFixed(1)} : 1</span><span class="k">first 0.3 s, ${show(liftoffLb, "lb", 1)} at liftoff</span></div>
+    <div><span class="k">Thrust rise</span><span class="v">${i90 >= 0 ? (th.t[i90] - t0 < 0.01 ? "under 0.01 s" : `${(th.t[i90] - t0).toFixed(2)} s`) : "-"}</span><span class="k">first motion to 90% of peak</span></div>`;
+}
+
 function railHtml(): string {
   if (!A || !flight) return "";
   const rail = getVehicle(vehicleKey).railFt;
@@ -664,7 +676,7 @@ function renderMotor(rebuildInputs = true) {
   }
   const coast = coastDrag(flight!, A!, burnout, cc.diaIn);
   const cd = coast?.cd50 ?? 0.45;
-  $("motor-sub").textContent = `Thrust = mass × axial acceleration + drag, with drag from ${coast ? `the coast Cd (${cd.toFixed(2)})` : "a Cd of 0.45 (no coast estimate)"}. Uses the burnout mass and diameter from Coast drag${mc.propLb === null ? "; add the propellant mass so the mass falls as it burns" : ""}.`;
+  $("motor-sub").textContent = `Thrust = mass × axial acceleration + drag, with drag from ${coast ? `the coast Cd (${cd.toFixed(2)})` : "a Cd of 0.45 (no coast estimate)"}. Uses the masses and diameter from the Vehicle card${mc.propLb === null ? "; add the propellant mass so the mass falls as it burns" : ""}. Ignition-to-liftoff delay can't be measured: the Blue Raven doesn't log when the igniter fired, and the rail holds the reading at 1 g until the rocket moves.`;
   const th = thrustCurve(flight!, A!, burnout, prop, cc.diaIn, cd);
   motorPlot?.destroy(); motorPlot = null;
   const host = $("motor-chart"); host.innerHTML = "";
@@ -677,7 +689,7 @@ function renderMotor(rebuildInputs = true) {
     <div><span class="k">Total impulse</span><span class="v">${th.impulseNs.toFixed(0)} N·s</span>${vsRated ? `<span class="k">${vsRated}</span>` : ""}</div>
     <div><span class="k">Burn time</span><span class="v">${th.burnTime.toFixed(2)} s</span></div>
     <div><span class="k">Average thrust</span><span class="v">${f(th.avgN)}</span></div>
-    <div><span class="k">Peak thrust</span><span class="v">${f(th.peakN)}</span></div>${railHtml()}`;
+    <div><span class="k">Peak thrust</span><span class="v">${f(th.peakN)}</span></div>${liftoffHtml(th, burnout + prop)}${railHtml()}`;
   const k = getUnits() === "imperial" ? 1 : 4.448222;
   const thrustCmps = cmps.filter((c) => c.trace.thrust);
   const liftMine = A!.events.find((e) => e.key === "liftoff")?.t ?? 0;
