@@ -969,14 +969,14 @@ function slRows(f: BlueRavenFlight | undefined = flight, a: Analysis | undefined
   const rows: SLRow[] = [];
   const re = railExit(f, a, getVehicle(vehicleKey).railFt);
   rows.push({
-    label: "Rail exit speed", value: re ? show(re.v, "ft/s") : "-", limit: `≥ ${show(SL_MIN_RAIL_EXIT, "ft/s")}`,
+    label: "Rail exit speed", value: re ? show(re.v, "ft/s") : f.hr ? "first motion not found" : "needs the high-rate log", limit: `≥ ${show(SL_MIN_RAIL_EXIT, "ft/s")}`,
     verdict: re ? (re.v >= SL_MIN_RAIL_EXIT ? "pass" : "fail") : "na", note: `${show(getVehicle(vehicleKey).railFt, "ft", 1)} of rail travel (Vehicle card)`,
   });
   const ae = aeroSeries(f, a);
-  rows.push({ label: "Stays subsonic", value: ae ? `Mach ${ae.maxMach.toFixed(2)}` : "-", limit: "< Mach 1", verdict: ae ? (ae.maxMach < 1 ? "pass" : "fail") : "na" });
+  rows.push({ label: "Stays subsonic", value: ae ? `Mach ${ae.maxMach.toFixed(2)}` : "needs pressure data", limit: "< Mach 1", verdict: ae ? (ae.maxMach < 1 ? "pass" : "fail") : "na" });
   const k = keyNumbersOf(a);
   rows.push({
-    label: "Apogee in the 4,000 to 6,000 ft band", value: show(k.apogee, "ft"), limit: "4000 to 6000 ft",
+    label: "Apogee in the 4,000 to 6,000 ft band", value: k.apogee === null ? "no apogee found" : show(k.apogee, "ft"), limit: "4000 to 6000 ft",
     verdict: k.apogee === null ? "na" : k.apogee >= 4000 && k.apogee <= 6000 ? "pass" : "fail",
   });
   const rec = evaluate(recovery, recoveryInputs(a));

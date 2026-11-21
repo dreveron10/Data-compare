@@ -63,7 +63,7 @@ export function evaluate(c: RecoveryConfig, x: RecoveryInputs): RecoveryResult {
     rows.push({
       label: s.name,
       sub: `${show(s.massLb, "lb", 1)}, KE at landing`,
-      value: show(ke, "ft-lbf", 1),
+      value: ke === null ? "no main descent fit" : show(ke, "ft-lbf", 1),
       limit: `≤ ${show(c.keLimit, "ft-lbf")}`,
       verdict: ke === null ? "na" : ke <= c.keLimit ? "pass" : "fail",
       note: `Lands under the limit below ${show(vMaxFor(s.massLb, c.keLimit), "ft/s", 1)}`,
@@ -71,7 +71,7 @@ export function evaluate(c: RecoveryConfig, x: RecoveryInputs): RecoveryResult {
   }
   rows.push({
     label: "Descent time",
-    value: x.descentTime !== null ? `${x.descentTime.toFixed(1)} s` : "-",
+    value: x.descentTime !== null ? `${x.descentTime.toFixed(1)} s` : "no landing found",
     limit: `≤ ${c.descentLimit} s`,
     verdict: x.descentTime === null ? "na" : x.descentTime <= c.descentLimit ? "pass" : "fail",
     note: "Apogee to touchdown, from the Blue Raven baro",
@@ -87,7 +87,7 @@ export function evaluate(c: RecoveryConfig, x: RecoveryInputs): RecoveryResult {
     const d = x.apogee !== null ? x.apogee - c.targetApogeeFt : null;
     rows.push({
       label: "Apogee vs target",
-      value: d !== null ? `${d >= 0 ? "+" : ""}${show(d, "ft")}` : "-",
+      value: d !== null ? `${d >= 0 ? "+" : ""}${show(d, "ft")}` : "no apogee found",
       limit: show(c.targetApogeeFt, "ft"),
       verdict: "na",
       note: d !== null ? `${((Math.abs(d) / c.targetApogeeFt) * 100).toFixed(1)}% off the declared target` : undefined,

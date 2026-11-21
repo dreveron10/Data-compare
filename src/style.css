@@ -644,3 +644,5 @@ table.chute td, table.chute th { font-size: 13px; white-space: nowrap; }
 .sl-table td:first-child { white-space: normal; min-width: 120px; }
 .sl-table td:first-child small { display: block; color: var(--muted); font-size: 11px; }
 .sl-table th { white-space: normal; vertical-align: bottom; }
+.sl-table td.na { color: var(--muted); font-style: italic; white-space: normal; }
+.sl-list li.na .val { color: var(--muted); font-size: 12.5px; font-weight: 500; font-style: italic; }
