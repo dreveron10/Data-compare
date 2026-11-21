@@ -262,7 +262,8 @@ async function loadCompare(files: InFile[]) {
     if (cmps.length >= MAX_COMPARES) cmps.shift();
     const used = new Set(cmps.map((c) => c.color));
     const color = CMP_COLORS.find((c) => !used.has(c)) ?? CMP_COLORS[0];
-    cmps.push({ id: `${Date.now()}-${Math.random()}`, trace, files, offset: 0, color, src: cmpSrc });
+    // the raw files are only needed to save a sim with the flight; a flight comparison keeps its parsed data instead
+    cmps.push({ id: `${Date.now()}-${Math.random()}`, trace, files: trace.kind === "sim" ? files : [], offset: 0, color, src: cmpSrc });
     alignCompares();
     applyCompare();
     showWarnings(A.warnings);
