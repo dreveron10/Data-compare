@@ -157,3 +157,6 @@ select { background: var(--panel-2); color: var(--text); border: 1px solid var(-
 #cmp-notes { margin-top: 6px; }
 .attrib { position: absolute; left: 12px; bottom: 8px; font-size: 10px; color: rgba(230, 235, 245, 0.7); background: rgba(11, 15, 23, 0.6); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
 .empty .attrib { display: none; }
+.no-gl { height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 40px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.no-webgl .inset, .no-webgl .cam-modes, .no-webgl .hud { display: none !important; }
+.no-webgl .stage { height: 160px; min-height: 0; }

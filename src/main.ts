@@ -10,7 +10,20 @@ import { SAT_ATTRIBUTION } from "./satellite";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const app = $("app");
-const replay = new Replay3D($("view3d"), $("inset3d"));
+// 3D needs WebGL; without it (old GPUs, some remote browsers) the rest of the site still works
+type ReplayApi = Pick<Replay3D, "setFlight" | "setCompare" | "setTime" | "setCameraMode" | "setSatellite"> & {
+  onSatellite?: (loaded: boolean) => void;
+};
+let replay: ReplayApi;
+try {
+  replay = new Replay3D($("view3d"), $("inset3d"));
+} catch {
+  replay = { setFlight() {}, setCompare() {}, setTime() {}, setCameraMode() {}, setSatellite() {} };
+  document.body.classList.add("no-webgl");
+  $("view3d").innerHTML =
+    '<div class="no-gl">3D replay needs WebGL, which this browser has turned off or does not support. ' +
+    "Charts and tables below still work. Try Chrome or Edge with hardware acceleration enabled.</div>";
+}
 const charts = new Charts($("charts"), (t) => seek(t));
 const scrub = $<HTMLInputElement>("scrub");
 const playBtn = $<HTMLButtonElement>("play");
