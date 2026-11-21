@@ -1225,22 +1225,25 @@ function reanalyze() {
 }
 
 /** state of the rocket at an event: altitude, vertical speed, speed along the path, tilt, load */
-function eventCard(tt: number): string {
+function eventState(tt: number) {
   const lr = flight!.lr!;
   const i = indexAt(lr.t, tt);
   const vu = lr.velUp[i], tilt = lr.tilt[i];
-  const speed = Number.isFinite(tilt) && tilt < 80 ? Math.abs(vu) / Math.cos((tilt * Math.PI) / 180) : null;
+  // speed along the path only while climbing, where the vertical speed and tilt pin it down
+  const speed = Number.isFinite(tilt) && tilt < 80 && vu > 0 ? vu / Math.cos((tilt * Math.PI) / 180) : null;
   let g: number | null = null;
-  if (flight!.hr && A!.accelMag) {
-    const h = indexAt(flight!.hr.t, tt);
-    g = A!.accelMag[h];
-  }
+  if (flight!.hr && A!.accelMag) g = A!.accelMag[indexAt(flight!.hr.t, tt)];
+  return { alt: A!.altSmooth[i], vu, speed, tilt: Number.isFinite(tilt) ? tilt : null, g: g !== null && Number.isFinite(g) ? g : null };
+}
+function eventCard(tt: number): string {
+  const { vu, speed, tilt, g } = eventState(tt);
+  const i = indexAt(flight!.lr!.t, tt);
   const rows: [string, string][] = [
     ["Altitude", show(A!.altSmooth[i], "ft")],
     ["Vertical speed", show(vu, "ft/s")],
-    ...(speed !== null && vu > 0 ? [["Speed", show(speed, "ft/s")] as [string, string]] : []),
-    ["Tilt", Number.isFinite(tilt) ? `${tilt.toFixed(0)}°` : "-"],
-    ...(g !== null && Number.isFinite(g) ? [["Load", `${g.toFixed(1)} g`] as [string, string]] : []),
+    ...(speed !== null ? [["Speed", show(speed, "ft/s")] as [string, string]] : []),
+    ["Tilt", tilt !== null ? `${tilt.toFixed(0)}°` : "-"],
+    ...(g !== null ? [["Load", `${g.toFixed(1)} g`] as [string, string]] : []),
   ];
   return rows.map(([k, v]) => `<span><b>${k}</b> ${v}</span>`).join("");
 }
@@ -1799,7 +1802,10 @@ async function buildReport() {
     .join("");
   const p = A.path;
   const evRows = A.events
-    .map((ev) => `<tr><td>${e(ev.label)}</td><td class="n">T+${ev.t.toFixed(2)} s</td><td class="n">${show(p.y[indexAt(p.t, ev.t)], "ft")}</td></tr>`)
+    .map((ev) => {
+      const st = eventState(ev.t);
+      return `<tr><td>${e(ev.label)}</td><td class="n">T+${ev.t.toFixed(2)} s</td><td class="n">${show(p.y[indexAt(p.t, ev.t)], "ft")}</td><td class="n">${st.speed !== null ? show(st.speed, "ft/s") : show(st.vu, "ft/s")}</td><td class="n">${st.tilt !== null ? st.tilt.toFixed(0) + "°" : "-"}</td></tr>`;
+    })
     .join("");
   const g = A.gps;
   const gpsBlock = g
@@ -1884,7 +1890,7 @@ async function buildReport() {
       <section><h2>Flight summary</h2><table><tr><th>Metric</th><th class="n">Site</th><th class="n">Blue Raven</th><th><span class="sr-only">Unit</span></th></tr>${metricRows}</table></section>
       <div>
         <section><h2>Recovery check</h2><table><tr><th>Item</th><th class="n">Value</th><th class="n">Limit</th><th><span class="sr-only">Unit</span></th></tr>${recRows}</table></section>
-        <section><h2>Events</h2><table><tr><th>Event</th><th class="n">Time</th><th class="n">Altitude</th></tr>${evRows}</table></section>
+        <section><h2>Events</h2><table><tr><th>Event</th><th class="n">Time</th><th class="n">Altitude</th><th class="n">Speed</th><th class="n">Tilt</th></tr>${evRows}</table><p style="color:#6b7891;font-size:8.5pt;margin:3px 0 0">Speed is along the path while climbing, vertical speed after apogee.</p></section>
       </div>
     </div>
     ${notesBlock}
