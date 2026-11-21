@@ -38,6 +38,8 @@ import { gFromMaterial, parseOrk } from "./parsers/ork";
 import { canopySwing } from "./swing";
 import { redundancy, sameFlight } from "./redundancy";
 import { buildKml } from "./kml";
+import { toCsv } from "./csv";
+import { statChanges } from "./libraryStats";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
@@ -2026,11 +2028,6 @@ async function openTogether() {
 
 // the entries currently listed (after search, filter and sort), for the flight log export
 // ---------- comparison as a spreadsheet ----------
-const csvCell = (v: string | number | null | undefined) => {
-  if (v === null || v === undefined || v === "") return "";
-  if (typeof v === "number") return Number.isFinite(v) ? String(Math.round(v * 100) / 100) : "";
-  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-};
 $("cmp-csv").addEventListener("click", () => {
   if (!A || !flight || !cmps.length) return;
   const rows: (string | number | null | undefined)[][] = [];
@@ -2057,7 +2054,7 @@ $("cmp-csv").addEventListener("click", () => {
       for (const r of red.rows) rows.push([r.label, r.a, r.b, r.diff, r.flag ? "yes" : ""]);
     }
   }
-  const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+  const csv = toCsv(rows);
   downloadBlob(`${fileSlug(me)}-comparison.csv`, new Blob(["\ufeff" + csv], { type: "text/csv" }));
 });
 
@@ -2070,23 +2067,6 @@ function statsFor(f: BlueRavenFlight, a: Analysis, e: LibraryEntry): Stats {
     drogueRate: k.drogueRate, mainRate: k.mainRate, maxAccel: k.maxAccel, mainAlt: k.mainAlt,
     ...measuredStats(f, a, vehicleKeyOf(e.vehicle), e.recovery ?? loadDefaultRecovery()),
   };
-}
-const STAT_NAMES: Partial<Record<keyof Stats, string>> = {
-  apogee: "apogee", coastCd: "coast Cd", impulseNs: "impulse", maxQ: "max q", maxMach: "max Mach",
-  padBattV: "pad battery", minBattV: "lowest battery", dataWarnings: "data warnings", slPass: "SL checks", slOver: "SL checks",
-  drogueRate: "drogue rate", mainRate: "main rate", mainAlt: "main altitude", drift: "drift", maxVel: "max velocity", maxAccel: "max accel", flightTime: "flight time",
-};
-function statChanges(old: Stats, nu: Stats): string[] {
-  const out = new Set<string>();
-  for (const key of Object.keys(nu) as (keyof Stats)[]) {
-    const a = old[key], b = nu[key];
-    let same: boolean;
-    if (Array.isArray(a) || Array.isArray(b)) same = JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-    else if (typeof a === "number" && typeof b === "number") same = Math.abs(a - b) <= Math.max(1e-6, 0.005 * Math.abs(a));
-    else same = (a ?? null) === (b ?? null);
-    if (!same && STAT_NAMES[key]) out.add(STAT_NAMES[key]!);
-  }
-  return [...out];
 }
 $("lib-refresh").addEventListener("click", async () => {
   const btn = $<HTMLButtonElement>("lib-refresh");
@@ -2131,12 +2111,7 @@ $("lib-log").addEventListener("click", () => {
     ["Battery on pad (V)", (e) => e.stats.padBattV], ["Lowest battery (V)", (e) => e.stats.minBattV], ["Data warnings", (e) => e.stats.dataWarnings],
     ["Tags", (e) => (e.tags ?? []).join("; ")], ["Notes", (e) => e.notes],
   ];
-  const cell = (v: string | number | null | undefined) => {
-    if (v === null || v === undefined || v === "") return "";
-    if (typeof v === "number") return Number.isFinite(v) ? String(Math.round(v * 100) / 100) : "";
-    return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-  };
-  const csv = [cols.map((c) => cell(c[0])).join(","), ...libShown.map((e) => cols.map((c) => cell(c[1](e))).join(","))].join("\n");
+  const csv = toCsv([cols.map((c) => c[0]), ...libShown.map((e) => cols.map((c) => c[1](e)))]);
   // BOM so Excel opens the units (·, °) correctly
   downloadBlob(`flight-log-${new Date().toISOString().slice(0, 10)}.csv`, new Blob(["\ufeff" + csv], { type: "text/csv" }));
 });
