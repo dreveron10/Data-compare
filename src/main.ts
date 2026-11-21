@@ -16,14 +16,14 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 const app = $("app");
 // 3D needs WebGL; without it (old GPUs, some remote browsers) the rest of the site still works
-type ReplayApi = Pick<Replay3D, "setFlight" | "setCompare" | "setTime" | "setCameraMode" | "setSatellite"> & {
+type ReplayApi = Pick<Replay3D, "setFlight" | "setCompare" | "setTime" | "setCameraMode" | "setSatellite" | "snapshot"> & {
   onSatellite?: (available: boolean, progress: number) => void;
 };
 let replay: ReplayApi;
 try {
   replay = new Replay3D($("view3d"), $("inset3d"));
 } catch {
-  replay = { setFlight() {}, setCompare() {}, setTime() {}, setCameraMode() {}, setSatellite() {} };
+  replay = { setFlight() {}, setCompare() {}, setTime() {}, setCameraMode() {}, setSatellite() {}, snapshot: () => "" };
   document.body.classList.add("no-webgl");
   $("view3d").innerHTML =
     '<div class="no-gl">3D replay needs WebGL, which this browser has turned off or does not support. ' +
@@ -92,6 +92,7 @@ async function loadFiles(files: InFile[], entryId?: string) {
     currentEntryId = entryId;
     if (!entryId) recovery = loadDefaultRecovery();
     $("save-open").hidden = false;
+    $("report-open").hidden = false;
     $("save-open").textContent = entryId ? "Edit saved flight" : "Save flight";
     showFlight();
   } catch (e) {
@@ -679,6 +680,61 @@ $("rec-default").addEventListener("click", () => {
   $("rec-default").textContent = "Saved as default";
   setTimeout(() => ($("rec-default").textContent = "Use for new flights too"), 1800);
 });
+
+// ---------- printable report ----------
+async function buildReport() {
+  if (!A || !flight) return;
+  const entry = currentEntryId ? await getEntry(currentEntryId) : undefined;
+  const title = entry?.name ?? flight.gps?.name ?? flight.name;
+  const fd = entry?.date || flightDate();
+  const dateStr = fd ? new Date(fd + "T12:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "";
+  const e = escapeHtml;
+  const metricRows = A.metrics
+    .map((m) => `<tr><td>${e(m.label)}</td><td class="n">${fmt(m.site, m.unit)}</td><td class="n">${fmt(m.device, m.unit)}</td><td>${e(m.unit)}</td></tr>`)
+    .join("");
+  const rec = evaluate(recovery, recoveryInputs());
+  const recRows = rec.rows
+    .map((r) => `<tr><td>${e(r.label)}${r.sub ? ` <span style="color:#6b7891">(${e(r.sub)})</span>` : ""}</td><td class="n">${e(r.value)}</td><td class="n">${e(r.limit)}</td><td class="${r.verdict}">${r.verdict === "pass" ? "Pass" : r.verdict === "fail" ? "Over" : ""}</td></tr>`)
+    .join("");
+  const p = A.path;
+  const evRows = A.events
+    .map((ev) => `<tr><td>${e(ev.label)}</td><td class="n">T+${ev.t.toFixed(2)} s</td><td class="n">${p.y[indexAt(p.t, ev.t)].toFixed(0)} ft</td></tr>`)
+    .join("");
+  const g = A.gps;
+  const gpsBlock = g
+    ? `<section><h2>Blue Raven vs GPS</h2><table><tr><th>Metric</th><th class="n">Blue Raven</th><th class="n">GPS</th><th></th></tr>${g.rows
+        .map((r) => `<tr><td>${e(r.label)}</td><td class="n">${fmt(r.br, r.unit)}</td><td class="n">${fmt(r.gps, r.unit)}</td><td>${e(r.unit)}</td></tr>`)
+        .join("")}</table><p>Landing ${g.landing.distance.toFixed(0)} ft from the pad at ${g.landing.bearing.toFixed(0)}°, ${g.landing.lat.toFixed(5)}, ${g.landing.lon.toFixed(5)}.</p></section>`
+    : "";
+  const mine = keyNumbersOf(A);
+  const cmpBlock = cmps.length
+    ? `<section><h2>Comparison</h2><table><tr><th>Metric</th><th class="n">This flight</th>${cmps.map((c) => `<th class="n">${e(c.trace.kind === "sim" ? "Sim: " + c.trace.name : c.trace.name)}</th>`).join("")}<th></th></tr>${KEY_ROWS.map(
+        ({ k, label, unit }) => `<tr><td>${label}</td><td class="n">${fmt(mine[k], unit)}</td>${cmps.map((c) => `<td class="n">${fmt(c.trace.key[k], unit)}</td>`).join("")}<td>${unit}</td></tr>`,
+      ).join("")}</table></section>`
+    : "";
+  const shot3d = replay.snapshot();
+  const figs = await charts.snapshots(["Altitude", "Velocity", "Acceleration", "Attitude", "Roll rate"]);
+  $("report").innerHTML = `
+    <h1>${e(title)}</h1>
+    <div class="meta">${e(dateStr)}${flight.summary?.raw["Flight number"] ? `, Blue Raven flight ${e(flight.summary.raw["Flight number"])}` : ""}${flight.gps ? ", with GPS" : ""}</div>
+    ${entry?.notes ? `<div class="notes">${e(entry.notes)}</div>` : ""}
+    <div class="cols">
+      <section><h2>Flight summary</h2><table><tr><th>Metric</th><th class="n">Site</th><th class="n">Blue Raven</th><th></th></tr>${metricRows}</table></section>
+      <div>
+        <section><h2>Recovery check</h2><table><tr><th>Item</th><th class="n">Value</th><th class="n">Limit</th><th></th></tr>${recRows}</table></section>
+        <section><h2>Events</h2><table><tr><th>Event</th><th class="n">Time</th><th class="n">Altitude</th></tr>${evRows}</table></section>
+      </div>
+    </div>
+    ${gpsBlock}
+    ${cmpBlock}
+    ${shot3d ? `<figure><img src="${shot3d}" alt="3D view of the trajectory" /></figure>` : ""}
+    ${figs.map((f) => `<figure><img src="${f.url}" alt="${e(f.title)} chart" /></figure>`).join("")}
+    <div class="foot">Generated ${new Date().toLocaleString()} by Data Compare (dreveron10.github.io/Data-compare). Baro altitude filtered with a 1 s median and 0.2 s average; descent rates are linear fits.</div>`;
+  // wait for images to decode before printing
+  await Promise.all([...$("report").querySelectorAll("img")].map((img) => img.decode().catch(() => undefined)));
+  window.print();
+}
+$("report-open").addEventListener("click", () => buildReport());
 
 // ---------- library (saved in this browser) ----------
 const saveDlg = $<HTMLDialogElement>("save-dialog");

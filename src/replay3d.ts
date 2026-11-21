@@ -662,6 +662,12 @@ export class Replay3D {
     this.insetRenderer.render(this.insetScene, this.insetCam);
   }
 
+  /** current 3D view as an image (renders a frame first so the buffer is fresh) */
+  snapshot(): string {
+    this.renderer.render(this.scene, this.camera);
+    return this.renderer.domElement.toDataURL("image/jpeg", 0.92);
+  }
+
   dispose() {
     this.renderer.setAnimationLoop(null);
     this.ro.disconnect();

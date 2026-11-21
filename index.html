@@ -21,6 +21,7 @@
       <div class="top-actions">
         <button class="btn" id="lib-open">Library</button>
         <button class="btn" id="save-open" hidden>Save flight</button>
+        <button class="btn" id="report-open" hidden>Print report</button>
         <label class="btn primary">
           Open flight files
           <input id="file-input" type="file" multiple accept=".csv,.xlsx,.kml" hidden />
@@ -204,6 +205,7 @@
       </div>
     </dialog>
 
+    <article id="report" aria-hidden="true"></article>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

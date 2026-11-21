@@ -43,6 +43,7 @@ function download(name: string, blob: Blob) {
 
 export class Charts {
   private plots: uPlot[] = [];
+  private defs: ChartDef[] = [];
   private playhead = 0;
   private events: FlightEvent[] = [];
   private syncingScale = false;
@@ -150,6 +151,7 @@ export class Charts {
       ],
     });
 
+    this.defs = defs;
     for (const d of defs) this.plots.push(this.make(d, a));
     this.resize();
   }
@@ -262,13 +264,16 @@ export class Charts {
     download(`${this.flightName}-${slug(d.title)}.csv`, new Blob([lines.join("\n")], { type: "text/csv" }));
   }
 
-  private exportPng(u: uPlot, d: ChartDef) {
-    // draw once without the playhead so the image is clean
+  /** chart image with title and legend, no playhead (for PNG export and the report) */
+  private async compose(u: uPlot, d: ChartDef): Promise<HTMLCanvasElement> {
+    // uPlot redraws on a microtask, so wait for the frame without the playhead
     const keep = this.playhead;
     this.playhead = NaN;
     u.redraw(false, false);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
     const src = u.ctx.canvas;
-    const pad = 16 * devicePixelRatio, head = 34 * devicePixelRatio, legend = 26 * devicePixelRatio;
+    const dpr = devicePixelRatio;
+    const pad = 16 * dpr, head = 34 * dpr, legend = 26 * dpr;
     const c = document.createElement("canvas");
     c.width = src.width + pad * 2;
     c.height = src.height + head + legend + pad;
@@ -276,24 +281,38 @@ export class Charts {
     ctx.fillStyle = "#131e33";
     ctx.fillRect(0, 0, c.width, c.height);
     ctx.fillStyle = "#e9eef7";
-    ctx.font = `600 ${16 * devicePixelRatio}px Barlow, system-ui, sans-serif`;
-    ctx.fillText(d.title, pad, pad + 14 * devicePixelRatio);
+    ctx.font = `600 ${16 * dpr}px Barlow, system-ui, sans-serif`;
+    ctx.fillText(d.title, pad, pad + 14 * dpr);
     ctx.drawImage(src, pad, head);
-    // legend
-    ctx.font = `${12 * devicePixelRatio}px Barlow, system-ui, sans-serif`;
+    ctx.font = `${12 * dpr}px Barlow, system-ui, sans-serif`;
     let x = pad;
-    const y = head + src.height + 16 * devicePixelRatio;
+    const y = head + src.height + 16 * dpr;
     for (const s of d.series) {
       ctx.fillStyle = s.color;
-      ctx.fillRect(x, y - 8 * devicePixelRatio, 14 * devicePixelRatio, 4 * devicePixelRatio);
-      x += 20 * devicePixelRatio;
+      ctx.fillRect(x, y - 8 * dpr, 14 * dpr, 4 * dpr);
+      x += 20 * dpr;
       ctx.fillStyle = "#e9eef7";
       ctx.fillText(s.label, x, y);
-      x += ctx.measureText(s.label).width + 18 * devicePixelRatio;
+      x += ctx.measureText(s.label).width + 18 * dpr;
     }
     this.playhead = keep;
     u.redraw(false, false);
+    return c;
+  }
+
+  private async exportPng(u: uPlot, d: ChartDef) {
+    const c = await this.compose(u, d);
     c.toBlob((b) => b && download(`${this.flightName}-${slug(d.title)}.png`, b), "image/png");
+  }
+
+  /** images of the charts whose titles start with any of the given names, in chart order */
+  async snapshots(names: string[]): Promise<{ title: string; url: string }[]> {
+    const out: { title: string; url: string }[] = [];
+    for (let i = 0; i < this.plots.length; i++) {
+      const d = this.defs[i];
+      if (names.some((n) => d.title.startsWith(n))) out.push({ title: d.title, url: (await this.compose(this.plots[i], d)).toDataURL("image/png") });
+    }
+    return out;
   }
 
   setPlayhead(t: number) {
