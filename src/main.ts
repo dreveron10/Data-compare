@@ -1,6 +1,11 @@
 import "./style.css";
+import { $, downloadBlob, escapeHtml, fileSlug } from "./ui";
+import { COND_MAP } from "./condLabels";
+import { initPreflight, preflight } from "./preflight";
+import { maybeNudgeAfterSave, renderBackupNudge } from "./backup";
+import { initOffline } from "./pwa";
 import { analyze, flightPhases, indexAt, type Analysis } from "./analysis";
-import { CHANNELS, identifyText, loadBlueRaven, parseSettings, type BlueRavenFlight, type Channel, type DeploySettings } from "./parsers/blueRaven";
+import { CHANNELS, identifyText, type BlueRavenFlight, type Channel } from "./parsers/blueRaven";
 import type { Replay3D, CameraMode } from "./replay3d";
 import { Charts } from "./charts";
 import { loadAndAnalyze } from "./background";
@@ -19,7 +24,7 @@ import { Recorder, pickMime } from "./record";
 import { applyTheme, axisColor, getTheme, gridColor, onThemeChange, setTheme } from "./theme";
 import { vMaxFor } from "./recovery";
 import { startTour, tourSeen } from "./tour";
-import { getVehicle, setVehicle, vehicleKeyOf, vehicleNames } from "./vehicle";
+import { getVehicle, setVehicle, vehicleKeyOf } from "./vehicle";
 import { checkSettings } from "./settingsCheck";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
@@ -34,7 +39,6 @@ import {
   type LibraryEntry,
 } from "./library";
 
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const app = $("app");
 // 3D needs WebGL; without it (old GPUs, some remote browsers) the rest of the site still works
@@ -377,9 +381,6 @@ function showWarnings(w: string[]) {
   el.innerHTML = w.map((x) => `<div>⚠ ${escapeHtml(x)}</div>`).join("");
 }
 
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-}
 
 // ---------- render a loaded flight ----------
 function showFlight() {
@@ -937,32 +938,6 @@ function renderEvents() {
     .join("");
 }
 
-const COND_MAP: Record<string, { flag?: string; state?: string; text: (v: Record<string, number>) => string }> = {
-  "Alt_above_pad_<_AGL1": { flag: "LT_AGL1", text: (v) => `AGL < ${show(v.AGL1, "ft")}` },
-  "Alt_above_pad_>_AGL2": { flag: "GT_AGL2", text: (v) => `AGL > ${show(v.AGL2, "ft")}` },
-  "Flight_angle_<_FANG1": { flag: "LT_FANG1", text: (v) => `Tilt < ${v.FANG1}°` },
-  "Flight_angle_>_FANG2": { flag: "GT_FANG2", text: (v) => `Tilt > ${v.FANG2}°` },
-  "Future_Angle_>_FUTANG": { flag: "GT_FUTANG", text: (v) => `Future angle > ${v.FUTANG}°` },
-  "Time_<_TVAL1": { flag: "LT_TVAL1", text: (v) => `Time < ${v.TVAL1} s` },
-  "Time_>_TVAL2": { flag: "GT_TVAL2", text: (v) => `Time > ${v.TVAL2} s` },
-  "Total_Velocity_<_VEL1": { flag: "LT_VEL1", text: (v) => `Velocity < ${show(v.VEL1, "ft/s")}` },
-  "Total_Velocity_>_VEL2": { flag: "GT_VEL2", text: (v) => `Velocity > ${show(v.VEL2, "ft/s")}` },
-  "Baro_velocity_<_BVEL": { flag: "LT_BVEL1", text: (v) => `Baro vel < ${show(v.BVEL1, "ft/s")}` },
-  "Burnouts_>_BURNCOUNT": { flag: "GT_BURN", text: (v) => `Burnouts ≥ ${v.BRNCNT}` },
-  "Channel_is_armed": { flag: "Armed", text: () => "Armed" },
-  Liftoff: { state: "Liftoff", text: () => "Liftoff" },
-  Apogee: { state: "Apogee", text: () => "Apogee" },
-  Pressure_Increasing: { state: "Press_Increasing", text: () => "Pressure increasing" },
-  Burnout_Coast: { state: "Burnout_Coast", text: () => "Coasting" },
-  Apo_Fired: { state: "Apo_fired", text: () => "Apo fired" },
-  Main_Fired: { state: "Main_fired", text: () => "Main fired" },
-  "3rd_Fired": { state: "3rd_fired", text: () => "3rd fired" },
-  "4th_Fired": { state: "4th_fired", text: () => "4th fired" },
-  Normal_Ascent: { state: "Normal_Ascent", text: () => "Normal ascent" },
-  "Accel velocity <= 0": { state: "Accel_Vel_LE_0", text: () => "Accel vel ≤ 0" },
-  "ECI Vertical Vel <=0": { state: "ECI_Vvel_le_0", text: () => "Vertical vel ≤ 0" },
-  "Tilt Exceeded 90 degrees": { state: "Tilt Exceeded 90deg", text: () => "Tilt > 90°" },
-};
 
 function renderSettings() {
   const s = flight!.settings;
@@ -1005,75 +980,6 @@ function renderSettings() {
   $("settings").innerHTML = `${check}<div class="muted small" style="margin-top:12px">All conditions must be true to fire. Green/red shows the logged state in the 0.15 s before each fire.</div>${html}`;
 }
 
-// ---------- pre-flight: settings workbook on its own ----------
-let preState: { s: DeploySettings; name: string } | null = null;
-function preflight(file: InFile) {
-  let s: DeploySettings;
-  try { s = parseSettings(file.buffer!); }
-  catch (e) { showWarnings([`${file.name}: not a Blue Raven deploy settings file (${(e as Error).message}).`]); return; }
-  preState = { s, name: file.name };
-  $("pre-vehicles").innerHTML = vehicleNames().map((n) => `<option value="${escapeHtml(n)}"></option>`).join("");
-  const issues = checkSettings(s);
-  const warns = issues.filter((i) => i.level === "warn").length;
-  const notes = issues.length - warns;
-  const parts = [warns ? `${warns} warning${warns === 1 ? "" : "s"}` : "", notes ? `${notes} note${notes === 1 ? "" : "s"}` : ""].filter(Boolean);
-  $("pre-sub").textContent = `${file.name}: ${parts.length ? `${parts.join(" and ")} to look at before flying.` : "no common setup problems found."} Nothing is uploaded; this only reads the file.`;
-  const chans = CHANNELS.map((ch: Channel) => {
-    const vals: Record<string, number> = {};
-    for (const [k, v] of Object.entries(s.values)) vals[k] = v[ch];
-    const chips = s.conditions.filter((c) => c.enabled[ch]).map((c) => `<span class="cond">${escapeHtml(COND_MAP[c.name]?.text(vals) ?? c.name)}</span>`).join("");
-    const armed = s.options["Arm_by_default"]?.[ch] === "TRUE";
-    const delay = s.options["Use_Delay"]?.[ch] === "TRUE" ? `${vals.delay} s delay` : "no delay";
-    return `<div class="settings-ch"><h3>${ch} <span class="muted small">(${armed ? "armed by default" : "not armed by default"}, ${delay})</span></h3>${chips || '<span class="muted small">no conditions</span>'}</div>`;
-  }).join("");
-  $("pre-body").innerHTML = `<div class="set-check">${
-    issues.length ? `<ul>${issues.map((i) => `<li class="${i.level}"><b>${escapeHtml(i.title)}</b><span>${escapeHtml(i.detail)}</span></li>`).join("")}</ul>` : ""
-  }</div><div class="pre-chans">${chans}</div><p class="muted small">All conditions on a channel must be true for it to fire.</p>`;
-  $<HTMLDialogElement>("pre-dialog").showModal();
-}
-$("pre-close").addEventListener("click", () => $<HTMLDialogElement>("pre-dialog").close());
-$("pre-print").addEventListener("click", () => {
-  if (!preState) return;
-  const { s, name } = preState;
-  const e = escapeHtml;
-  const vname = $<HTMLInputElement>("pre-vehicle").value.trim();
-  const motor = $<HTMLInputElement>("pre-motor").value.trim();
-  const apo = parseFloat($<HTMLInputElement>("pre-apogee").value);
-  const v = getVehicle(vehicleKeyOf(vname));
-  const lbs = (x: number | null) => (x === null ? "________" : `${x.toFixed(2)} lb`);
-  const issues = checkSettings(s);
-  const chans = CHANNELS.map((ch: Channel) => {
-    const vals: Record<string, number> = {};
-    for (const [k, val] of Object.entries(s.values)) vals[k] = val[ch];
-    const conds = s.conditions.filter((c) => c.enabled[ch]).map((c) => COND_MAP[c.name]?.text(vals) ?? c.name).join(", ");
-    const armed = s.options["Arm_by_default"]?.[ch] === "TRUE" ? "yes" : "NO";
-    const delay = s.options["Use_Delay"]?.[ch] === "TRUE" ? `${vals.delay} s` : "none";
-    return `<tr><td><b>${ch}</b></td><td>${armed}</td><td>${delay}</td><td>${e(conds || "no conditions")}</td><td class="chk">☐</td></tr>`;
-  }).join("");
-  $("report").innerHTML = `
-    <h1>Pad card${vname ? `: ${e(vname)}` : ""}</h1>
-    <div class="meta">Date ____________ &nbsp; Flyer ____________________ &nbsp; Settings file ${e(name)}</div>
-    <div class="cols">
-      <section><h2>Vehicle</h2><table>
-        <tr><td>Motor</td><td class="n">${motor ? e(motor) : "________"}</td></tr>
-        <tr><td>Liftoff mass</td><td class="n">${v.burnoutLb !== null ? lbs(v.burnoutLb + (v.propLb ?? 0)) : "________"}</td></tr>
-        <tr><td>Burnout mass</td><td class="n">${lbs(v.burnoutLb)}</td></tr>
-        <tr><td>Body diameter</td><td class="n">${v.diaIn.toFixed(2)} in</td></tr>
-        <tr><td>Expected apogee</td><td class="n">${Number.isFinite(apo) ? `${apo.toFixed(0)} ft` : "________"}</td></tr>
-      </table></section>
-      <section><h2>On the pad</h2><table>
-        <tr><td>Altimeter armed, beeps OK</td><td class="chk">☐</td></tr>
-        <tr><td>GPS tracker locked, sats ______</td><td class="chk">☐</td></tr>
-        <tr><td>Charges and e-matches checked</td><td class="chk">☐</td></tr>
-        <tr><td>Rail angle ______°, wind ______ mph</td><td class="chk">☐</td></tr>
-        <tr><td>RSO initials ______</td><td class="chk">☐</td></tr>
-      </table></section>
-    </div>
-    <section><h2>Deployment channels</h2><table><tr><th>Channel</th><th>Armed</th><th>Delay</th><th>Fires when all are true</th><th>OK</th></tr>${chans}</table></section>
-    <section><h2>Settings check</h2>${issues.length ? `<table>${issues.map((i) => `<tr><td class="${i.level === "warn" ? "fail" : ""}">${i.level === "warn" ? "Warning" : "Note"}</td><td><b>${e(i.title)}</b>. ${e(i.detail)}</td></tr>`).join("")}</table>` : "<p>No common setup problems found.</p>"}</section>
-    <div class="foot">Printed ${new Date().toLocaleString()} from Data Compare. Check against the altimeter itself before flight.</div>`;
-  window.print();
-});
 
 function renderScrubEvents() {
   const span = A!.tEnd - A!.tStart;
@@ -1650,14 +1556,6 @@ $("export-all").addEventListener("click", () => {
 });
 
 // ---------- share one flight ----------
-const fileSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "flight";
-function downloadBlob(name: string, blob: Blob) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-}
 async function shareEntry(e: LibraryEntry) {
   downloadBlob(`${fileSlug(e.name)}.flight.zip`, await exportBackup([e]));
 }
@@ -1955,46 +1853,6 @@ $("lib-list").addEventListener("click", async (ev) => {
     await renderLibrary();
   }
 });
-async function exportLibrary() {
-  const blob = await exportBackup();
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `data-compare-library-${new Date().toISOString().slice(0, 10)}.zip`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  try { localStorage.setItem("dc.lastBackup", new Date().toISOString()); localStorage.removeItem("dc.backupSnooze"); } catch { /* ignore */ }
-  $("backup-toast").hidden = true;
-  renderBackupNudge();
-}
-$("lib-export").addEventListener("click", () => exportLibrary());
-
-// ---------- backup reminder: browser storage can be cleared, so nudge after a few new saves ----------
-const NUDGE_AFTER = 3;
-async function unbackedCount() {
-  const since = localStorage.getItem("dc.lastBackup") ?? "";
-  return (await listEntries()).filter((e) => e.savedAt > since).length;
-}
-async function renderBackupNudge() {
-  const n = await unbackedCount();
-  const last = localStorage.getItem("dc.lastBackup");
-  const el = $("lib-nudge");
-  el.hidden = n === 0;
-  el.innerHTML = n ? `${n} saved ${n === 1 ? "entry is" : "entries are"} not in a backup yet${last ? ` (last backup ${new Date(last).toLocaleDateString()})` : ""}. <button class="btn small-btn primary" type="button" data-backup>Export backup</button>` : "";
-}
-$("lib-nudge").addEventListener("click", (e) => { if ((e.target as HTMLElement).closest("[data-backup]")) exportLibrary(); });
-async function maybeNudgeAfterSave() {
-  const n = await unbackedCount();
-  const snooze = Number(localStorage.getItem("dc.backupSnooze") ?? "0");
-  if (n < NUDGE_AFTER || n < snooze) return;
-  $("backup-toast-text").textContent = `${n} flights saved since your last library backup. Browser data can be cleared, so keep a copy.`;
-  $("backup-toast").hidden = false;
-}
-$("backup-now").addEventListener("click", () => exportLibrary());
-$("backup-later").addEventListener("click", async () => {
-  // ask again after a few more saves
-  try { localStorage.setItem("dc.backupSnooze", String((await unbackedCount()) + NUDGE_AFTER)); } catch { /* ignore */ }
-  $("backup-toast").hidden = true;
-});
 {
   const inp = $<HTMLInputElement>("lib-import");
   inp.addEventListener("change", async () => {
@@ -2080,14 +1938,5 @@ async function recordVideo() {
 }
 $("rec-btn").addEventListener("click", () => recordVideo());
 
-// ---------- offline at the launch field ----------
-if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-  window.addEventListener("load", () => { navigator.serviceWorker.register("./sw.js").catch(() => undefined); });
-}
-function renderOnline() {
-  const off = !navigator.onLine;
-  $("offline-badge").hidden = !off;
-}
-window.addEventListener("online", renderOnline);
-window.addEventListener("offline", renderOnline);
-renderOnline();
+initPreflight(showWarnings);
+initOffline();
