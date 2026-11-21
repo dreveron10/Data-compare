@@ -46,7 +46,7 @@ import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
 import { evaluate, loadDefaultRecovery, saveDefaultRecovery, type RecoveryConfig } from "./recovery";
 import {
-  deleteEntry, listTrash, restoreEntry, trashDaysLeft, trashEntry, exportBackup, getEntry, importBackup, listEntries, newId, putEntry, requestPersistence, storageUse,
+  deleteEntry, refFlights, setRefFlight, listTrash, restoreEntry, trashDaysLeft, trashEntry, exportBackup, getEntry, importBackup, listEntries, newId, putEntry, requestPersistence, storageUse,
   type LibraryEntry,
 } from "./library";
 
@@ -974,16 +974,6 @@ async function loadVehicleKey() {
 
 // ---------- compare with the previous flight of the same vehicle ----------
 let previousEntry: LibraryEntry | null = null;
-// one pinned reference flight per vehicle (localStorage: vehicle key -> entry id)
-const REF_KEY = "dc.refFlights";
-function refFlights(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(REF_KEY) || "{}") as Record<string, string>; } catch { return {}; }
-}
-function setRefFlight(vehicleKey: string, id: string | null) {
-  const m = refFlights();
-  if (id) m[vehicleKey] = id; else delete m[vehicleKey];
-  try { localStorage.setItem(REF_KEY, JSON.stringify(m)); } catch { /* storage full or blocked: pin just won't stick */ }
-}
 async function findPreviousFlight(cur?: LibraryEntry) {
   previousEntry = null;
   const btn = $("cmp-last");

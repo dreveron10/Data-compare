@@ -118,9 +118,27 @@ export async function storageUse(): Promise<{ used: number; quota: number } | nu
 // ---------- backup ----------
 
 /** zip layout: <id>/entry.json (metadata) + <id>/<file name>. Pass entries to export only those. */
+// one pinned reference flight per vehicle (vehicle key -> entry id), kept in localStorage and
+// carried in full backups
+const REF_KEY = "dc.refFlights";
+export function refFlights(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(REF_KEY) || "{}") as Record<string, string>; } catch { return {}; }
+}
+export function setRefFlight(vehicleKey: string, id: string | null) {
+  const m = refFlights();
+  if (id) m[vehicleKey] = id; else delete m[vehicleKey];
+  try { localStorage.setItem(REF_KEY, JSON.stringify(m)); } catch { /* storage full or blocked: the pin just won't stick */ }
+}
+
 export async function exportBackup(only?: LibraryEntry[]): Promise<Blob> {
   const entries = only ?? (await listEntries());
   const files: Record<string, Uint8Array> = {};
+  // a full backup keeps the reference pins; a single shared flight doesn't pin anything on the other end
+  if (!only) {
+    const ids = new Set(entries.map((e) => e.id));
+    const pins = Object.fromEntries(Object.entries(refFlights()).filter(([, id]) => ids.has(id)));
+    if (Object.keys(pins).length) files["refs.json"] = strToU8(JSON.stringify(pins, null, 2));
+  }
   for (const e of entries) {
     const { files: fs, ...meta } = e;
     files[`${e.id}/entry.json`] = strToU8(JSON.stringify({ ...meta, fileNames: fs.map((f) => f.name) }, null, 2));
@@ -149,5 +167,13 @@ export async function importBackup(buf: ArrayBuffer): Promise<LibraryEntry[]> {
     imported.push(entry);
   }
   if (imported.length === 0) throw new Error("no flights found in the zip");
+  // restore reference pins for vehicles that don't have one here yet
+  if (all["refs.json"]) {
+    try {
+      const pins = JSON.parse(strFromU8(all["refs.json"])) as Record<string, string>;
+      const have = refFlights(), ids = new Set(imported.map((e) => e.id));
+      for (const [k, id] of Object.entries(pins)) if (!have[k] && ids.has(id)) setRefFlight(k, id);
+    } catch { /* a damaged pins file only loses the pins */ }
+  }
   return imported;
 }
