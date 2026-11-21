@@ -116,6 +116,10 @@ export class Charts {
         series: [
           { label: "Dynamic pressure q", data: aero.qPsf, color: "#ff7a1a", width: 1.8, unit: "psf" },
           { label: "Mach", data: aero.mach, color: "#6cc4ff", width: 1.5, unit: "", scale: "y2" },
+          ...cmps.filter((c) => c.trace.aero).flatMap((c) => [
+            { label: `${cmpName(c)} q`, data: onBase(lr.t, sh(c), c.trace.aero!.t, c.trace.aero!.qPsf), color: c.color, width: 1.5, dash: [8, 4], unit: "psf" },
+            { label: `${cmpName(c)} Mach`, data: onBase(lr.t, sh(c), c.trace.aero!.t, c.trace.aero!.mach), color: c.color, width: 1, dash: [2, 3], unit: "", scale: "y2" },
+          ]),
         ],
       });
     }

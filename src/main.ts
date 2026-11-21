@@ -20,7 +20,7 @@ import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
 import { isGenericAlt, parseGenericAlt } from "./parsers/genericAlt";
 import { isGpsLog, isGpsSummary } from "./parsers/featherweightGps";
-import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
+import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
 import { evaluate, loadDefaultRecovery, saveDefaultRecovery, type RecoveryConfig } from "./recovery";
@@ -210,6 +210,18 @@ async function loadCompare(files: InFile[]) {
       const res = await loadAndAnalyze(files).finally(() => setLoading(null));
       if (!res.flight.lr || !res.analysis) throw new Error("Comparison needs an OpenRocket CSV export or a Blue Raven LR file.");
       trace = traceFromFlight(res.analysis, res.flight);
+      // Mach/q and thrust for the overlays, on the comparison's own liftoff clock
+      const cf = res.flight, ca = res.analysis;
+      const clift = ca.events.find((e) => e.key === "liftoff")?.t ?? 0;
+      const ae = aeroSeries(cf, ca);
+      if (ae) trace.aero = { t: Float64Array.from(cf.lr!.t, (x) => x - clift), mach: ae.mach, qPsf: ae.qPsf };
+      if (cf.hr && ca.axialAccel) {
+        const cc = coastCfg(), mc = motorCfg();
+        const m = cc.massLb ?? recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
+        const cd = coastDrag(cf, ca, m, cc.diaIn)?.cd50 ?? 0.45;
+        const th = thrustCurve(cf, ca, m, mc.propLb ?? 0, cc.diaIn, cd);
+        if (th) trace.thrust = { t: Float64Array.from(th.t, (x) => x - clift), lbf: Float32Array.from(th.thrustLbf) };
+      }
     }
     // keep at most 3: the oldest drops off
     if (cmps.length >= MAX_COMPARES) cmps.shift();
@@ -249,6 +261,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-align]").forEach((b) =>
 
 function applyCompare() {
   if (!A || !flight) return;
+  renderMotor(false);
   charts.setFlight(A, flight, cmps);
   replay.setCompare(cmps);
   renderCompare();
@@ -554,14 +567,18 @@ function renderMotor(rebuildInputs = true) {
     <div><span class="k">Average thrust</span><span class="v">${f(th.avgN)}</span></div>
     <div><span class="k">Peak thrust</span><span class="v">${f(th.peakN)}</span></div>`;
   const k = getUnits() === "imperial" ? 1 : 4.448222;
+  const thrustCmps = cmps.filter((c) => c.trace.thrust);
+  const liftMine = A!.events.find((e) => e.key === "liftoff")?.t ?? 0;
   motorPlot = new uPlot({
     width: Math.max(220, host.clientWidth || 320), height: 160, legend: { show: false }, cursor: { y: false }, scales: { x: { time: false } },
     axes: [
       { stroke: "#8d9bb8", label: "Flight time (s)", labelSize: 20, size: 34, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
       { stroke: "#8d9bb8", label: `Thrust (${getUnits() === "imperial" ? "lbf" : "N"})`, labelSize: 20, size: 48, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
     ],
-    series: [{}, { stroke: "#ff7a1a", width: 1.5, fill: "rgba(255,122,26,0.12)", points: { show: false } }],
-  }, [th.t, th.thrustLbf.map((x) => x * k)], host);
+    series: [{}, { stroke: "#ff7a1a", width: 1.5, fill: "rgba(255,122,26,0.12)", points: { show: false } },
+      ...thrustCmps.map((c) => ({ stroke: c.color, width: 1.5, dash: [6, 4], points: { show: false } }))],
+  }, [th.t, th.thrustLbf.map((x) => x * k), ...thrustCmps.map((c) => th.t.map((x) => { const v = sampleAt(c.trace.thrust!.t, c.trace.thrust!.lbf, x - liftMine - c.offset); return Number.isFinite(v) ? v * k : null; }))] as uPlot.AlignedData, host);
+  $("motor-cmp").innerHTML = thrustCmps.map((c) => `<span><i class="sw" style="background:${c.color}"></i>${escapeHtml(c.trace.name)}: ${(c.trace.thrust!.lbf.reduce((s2, v, i, arr) => s2 + (i ? v * (c.trace.thrust!.t[i] - c.trace.thrust!.t[i - 1]) : 0), 0) * 4.448222).toFixed(0)} N·s</span>`).join("");
 }
 function motorInput() {
   const mc = motorCfg();

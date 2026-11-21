@@ -50,6 +50,10 @@ export interface CompareTrace {
   /** path is in true east/north (true for sims with position data and GPS-aligned flights) */
   compass: boolean;
   events: { label: string; t: number }[];
+  /** Mach and dynamic pressure, times after liftoff (Blue Raven comparisons) */
+  aero?: { t: Float64Array; mach: Float32Array; qPsf: Float32Array };
+  /** thrust estimate, times after liftoff, lbf (Blue Raven comparisons with a high-rate log) */
+  thrust?: { t: Float64Array; lbf: Float32Array };
   /** times after liftoff used to line comparisons up at other events */
   align: { apogee: number | null; main: number | null };
   key: KeyNumbers;
