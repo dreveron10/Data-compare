@@ -276,7 +276,10 @@ mark { background: rgba(255, 122, 26, 0.28); color: inherit; border-radius: 2px;
 
 /* phones */
 @media (max-width: 640px) {
-  .topbar { padding: 10px 12px; gap: 10px; }
+  /* the wrapped header is ~130 px tall on a phone: let it scroll away instead of covering a sixth of the screen */
+  .topbar { padding: 10px 12px; gap: 10px; position: static; }
+  .land-dist { font-size: 22px; }
+  .coast-cd .big { font-size: 26px; }
   .brand-sub { font-size: 12px; }
   .top-actions { gap: 6px; }
   .top-actions .btn { padding: 7px 10px; font-size: 13px; }
@@ -466,3 +469,9 @@ table.wind .bar { position: absolute; left: 0; bottom: -3px; height: 3px; border
 .land-ll code { flex: 1; min-width: 0; font-family: var(--num); font-size: 15px; letter-spacing: 0.02em; overflow-wrap: anywhere; user-select: all; }
 .land-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .land-actions a.btn { text-decoration: none; }
+table.wind tr[title] td:first-child { text-decoration: none; cursor: default; }
+@media (max-width: 640px) {
+  /* docked video sits above the camera chips, clear of the readout and attitude inset */
+  .video-wrap.pip { left: 8px; right: auto; top: auto; bottom: 132px; width: 46%; }
+  .video-wrap.pip video { max-height: 24vh; object-fit: contain; }
+}
