@@ -4,6 +4,7 @@ import { CHANNELS, loadBlueRaven, type BlueRavenFlight, type Channel } from "./p
 import { Replay3D, type CameraMode } from "./replay3d";
 import { Charts } from "./charts";
 import { loadAndAnalyze } from "./background";
+import { findFindings } from "./findings";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earth";
@@ -256,6 +257,7 @@ function showFlight() {
   renderCompare();
   $("lg-x").textContent = A.compass ? "East" : "Downrange";
   $("lg-z").textContent = A.compass ? "North" : "Crossrange";
+  renderFindings();
   renderMetrics();
   renderRecovery();
   renderGps();
@@ -284,6 +286,20 @@ function renderMetrics() {
   });
   $("metrics").innerHTML = `<tr><th>Metric</th><th>Site</th><th>Blue Raven</th><th>Δ</th><th></th></tr>${rows.join("")}`;
 }
+
+// ---------- findings ----------
+function renderFindings() {
+  $("find-panel").hidden = !A;
+  if (!A || !flight) return;
+  const list = findFindings(flight, A);
+  $("findings").innerHTML = list
+    .map((fd) => `<li class="${fd.level}"${fd.t !== undefined ? ` data-t="${fd.t}" title="Jump to T+${fd.t.toFixed(2)} s"` : ""}><div class="ft">${escapeHtml(fd.title)}${fd.t !== undefined ? `<span>T+${fd.t.toFixed(1)}</span>` : ""}</div><div class="fd">${escapeHtml(fd.detail)}</div></li>`)
+    .join("");
+}
+$("findings").addEventListener("click", (e) => {
+  const li = (e.target as HTMLElement).closest("li[data-t]") as HTMLElement | null;
+  if (li) seek(parseFloat(li.dataset.t!));
+});
 
 // ---------- recovery check ----------
 function recoveryInputs() {

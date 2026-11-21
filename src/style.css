@@ -317,3 +317,15 @@ mark { background: rgba(255, 122, 26, 0.28); color: inherit; border-radius: 2px;
 .spinner { width: 22px; height: 22px; border: 3px solid var(--line); border-top-color: var(--signal); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+/* findings */
+.findings { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.findings li { border-left: 3px solid var(--line); padding: 6px 10px; border-radius: 0 8px 8px 0; background: var(--panel-2); font-size: 13px; }
+.findings li.warn { border-left-color: var(--signal); }
+.findings li.info { border-left-color: var(--accent); }
+.findings li.good { border-left-color: var(--good); }
+.findings li[data-t] { cursor: pointer; }
+.findings li[data-t]:hover { background: #20304f; }
+.findings .ft { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.findings .ft span { font-family: var(--num); font-weight: 500; color: var(--muted); white-space: nowrap; }
+.findings .fd { color: var(--muted); margin-top: 2px; line-height: 1.35; }
