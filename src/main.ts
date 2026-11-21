@@ -289,6 +289,7 @@ function showFlight() {
   renderEvents();
   renderSettings();
   renderScrubEvents();
+  loadMarks();
   pause();
   seek(Math.max(A.tStart, -1));
 }
@@ -556,6 +557,65 @@ function renderScrubEvents() {
     .join("");
 }
 
+// ---------- notes on the timeline ----------
+let marks: { t: number; text: string }[] = [];
+const marksKey = () => `dc.marks.${currentEntryId ?? flight?.name ?? ""}`;
+async function loadMarks() {
+  marks = [];
+  if (currentEntryId) {
+    const e = await getEntry(currentEntryId);
+    if (e?.marks) marks = e.marks.slice();
+  }
+  if (!marks.length) {
+    try { marks = JSON.parse(localStorage.getItem(marksKey()) ?? "[]"); } catch { marks = []; }
+  }
+  renderMarks();
+}
+async function saveMarks() {
+  marks.sort((a, b) => a.t - b.t);
+  try { localStorage.setItem(marksKey(), JSON.stringify(marks)); } catch { /* full or blocked */ }
+  if (currentEntryId) {
+    const e = await getEntry(currentEntryId);
+    if (e) await putEntry({ ...e, marks });
+  }
+  renderMarks();
+}
+const tLabel = (x: number) => `T${x < 0 ? "−" : "+"}${Math.abs(x).toFixed(2)}`;
+function renderMarks() {
+  $("marks-panel").hidden = !A;
+  if (!A) return;
+  const span = A.tEnd - A.tStart;
+  $("scrub-marks").innerHTML = marks
+    .map((m) => `<span title="${escapeHtml(tLabel(m.t))}: ${escapeHtml(m.text)}" style="left:${((m.t - A!.tStart) / span) * 100}%"></span>`)
+    .join("");
+  $("marks").innerHTML = marks.length
+    ? marks.map((m, i) => `<li data-i="${i}" title="Jump to ${tLabel(m.t)}"><span class="mt">${tLabel(m.t)}</span><span class="mx">${escapeHtml(m.text)}</span><button class="del" data-del="${i}" title="Delete note" aria-label="Delete note">×</button></li>`).join("")
+    : '<li class="empty-note">Pause where something happens, type what you saw and press Add. Notes show as yellow marks on the timeline.</li>';
+  updateMarkPlaceholder();
+}
+function updateMarkPlaceholder() {
+  $<HTMLInputElement>("mark-text").placeholder = `Note at ${tLabel(t)} (press N)`;
+  const near = marks.findIndex((m) => Math.abs(m.t - t) < 0.3);
+  document.querySelectorAll("#marks li[data-i]").forEach((li) => li.classList.toggle("near", Number((li as HTMLElement).dataset.i) === near));
+}
+$("mark-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const inp = $<HTMLInputElement>("mark-text");
+  const text = inp.value.trim();
+  if (!text || !A) return;
+  marks.push({ t: Math.round(t * 100) / 100, text });
+  inp.value = "";
+  inp.blur();
+  saveMarks();
+});
+$("marks").addEventListener("click", (e) => {
+  const tgt = e.target as HTMLElement;
+  const del = tgt.closest<HTMLElement>("[data-del]");
+  if (del) { marks.splice(Number(del.dataset.del), 1); saveMarks(); return; }
+  const li = tgt.closest<HTMLElement>("li[data-i]");
+  if (li) seek(marks[Number(li.dataset.i)].t);
+});
+
 // ---------- HUD ----------
 function phaseAt(time: number) {
   const ev = (k: string) => A!.events.find((e) => e.key === k)?.t;
@@ -720,6 +780,7 @@ function seek(time: number) {
   if (!playing || now - lastChartUpdate > 66) {
     charts.setPlayhead(t);
     lastChartUpdate = now;
+    updateMarkPlaceholder();
   }
 }
 
@@ -789,6 +850,7 @@ document.addEventListener("keydown", (e) => {
   else if (k === "Home") seek(A.tStart);
   else if (k === "End") seek(A.tEnd);
   else if (/^[1-9]$/.test(k)) { const ev = A.events[Number(k) - 1]; if (ev) seek(ev.t); }
+  else if (k === "n" || k === "N") { pause(); $("mark-text").focus(); }
   else if (k === "f" || k === "F") setCam("follow");
   else if (k === "o" || k === "O") setCam("overview");
   else if (k === "g" || k === "G") setCam("ground");
@@ -1007,7 +1069,7 @@ $("share-open").addEventListener("click", async () => {
     id: newId(), kind: "flight", name: flight.gps?.name ?? flight.name, date: flightDate(), notes: "",
     savedAt: new Date().toISOString(),
     stats: { apogee: k.apogee, flightTime: k.flightTime, drift: k.drift, maxVel: k.maxVel, hasGps: !!flight.gps },
-    files: lastFiles, recovery,
+    files: lastFiles, recovery, marks,
   };
   await shareEntry(e);
 });
@@ -1069,6 +1131,7 @@ $("save-form").addEventListener("submit", async (e) => {
       drogueRate: k.drogueRate, mainRate: k.mainRate, maxAccel: k.maxAccel, mainAlt: k.mainAlt },
     files: lastFiles,
     recovery,
+    marks,
   };
   try {
     await putEntry(entry);

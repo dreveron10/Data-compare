@@ -179,6 +179,14 @@
           <h3>Events</h3>
           <ul class="events" id="events"></ul>
         </div>
+        <div class="panel" id="marks-panel" hidden>
+          <h3>Notes on the timeline</h3>
+          <form class="mark-form" id="mark-form" autocomplete="off">
+            <input id="mark-text" type="text" maxlength="200" placeholder="Note at T+0.00 (press N)" aria-label="Note text" />
+            <button class="btn small-btn" type="submit">Add</button>
+          </form>
+          <ul class="marks" id="marks"></ul>
+        </div>
         <div class="panel" id="settings-panel" hidden>
           <h3>Deployment settings</h3>
           <div id="settings"></div>
@@ -194,6 +202,7 @@
           <div class="scrub-phases" id="scrub-phases"></div>
           <input type="range" id="scrub" min="0" max="1" step="0.001" value="0" aria-label="Flight time" />
           <div class="scrub-events" id="scrub-events"></div>
+          <div class="scrub-marks" id="scrub-marks"></div>
         </div>
         <button class="btn icon sm" id="keys-btn" title="Keyboard shortcuts" aria-label="Keyboard shortcuts" aria-expanded="false">?</button>
         <div class="keys-pop" id="keys-pop" hidden>
@@ -203,6 +212,7 @@
           <div><kbd>1</kbd> to <kbd>9</kbd> jump to an event in the list</div>
           <div><kbd>J</kbd> slower, <kbd>K</kbd> pause, <kbd>L</kbd> faster</div>
           <div><kbd>Home</kbd> <kbd>End</kbd> start or end</div>
+          <div><kbd>N</kbd> add a note at this moment</div>
           <div><kbd>F</kbd> follow, <kbd>O</kbd> overview, <kbd>G</kbd> ground camera, <kbd>T</kbd> tour</div>
         </div>
         <select id="speed" title="Playback speed (J / L)">

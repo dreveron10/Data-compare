@@ -23,6 +23,8 @@ export interface LibraryEntry {
   files: StoredFile[];
   /** recovery check setup for this vehicle (section masses, limits) */
   recovery?: RecoveryConfig;
+  /** notes pinned to moments in the flight (s, flight time) */
+  marks?: { t: number; text: string }[];
 }
 
 const DB = "data-compare";

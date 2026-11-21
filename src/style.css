@@ -407,3 +407,19 @@ table.wind td:first-child { color: var(--muted); font-family: inherit; }
 table.wind .arrow { display: inline-block; width: 16px; text-align: center; color: var(--accent); font-weight: 700; margin-right: 2px; }
 table.wind .spd { position: relative; display: inline-block; min-width: 64px; text-align: left; }
 table.wind .bar { position: absolute; left: 0; bottom: -3px; height: 3px; border-radius: 2px; background: var(--accent); opacity: 0.7; }
+
+/* timeline notes */
+.mark-form { display: flex; gap: 6px; margin-top: 6px; }
+.mark-form input { flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: inherit; border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px; }
+.mark-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.marks { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.marks li { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px; align-items: start; padding: 6px 8px; border-radius: 8px; background: var(--panel-2); cursor: pointer; font-size: 13px; }
+.marks li:hover { outline: 1px solid var(--line); }
+.marks li.near { outline: 1px solid #f7d154; }
+.marks .mt { font-family: var(--num); color: #f7d154; font-weight: 600; }
+.marks .mx { overflow-wrap: anywhere; }
+.marks .del { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+.marks .del:hover { color: var(--signal); }
+.marks .empty-note { cursor: default; background: none; color: var(--muted); padding: 2px 0; display: block; }
+.scrub-marks { position: absolute; left: 8px; right: 8px; top: -9px; height: 9px; pointer-events: none; }
+.scrub-marks span { position: absolute; width: 8px; height: 8px; margin-left: -4px; background: #f7d154; transform: rotate(45deg); border-radius: 1px; box-shadow: 0 0 0 1.5px var(--panel); }
