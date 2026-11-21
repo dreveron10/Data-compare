@@ -1,6 +1,6 @@
 import "./style.css";
 import { analyze, flightPhases, indexAt, type Analysis } from "./analysis";
-import { CHANNELS, loadBlueRaven, parseSettings, type BlueRavenFlight, type Channel, type DeploySettings } from "./parsers/blueRaven";
+import { CHANNELS, identifyText, loadBlueRaven, parseSettings, type BlueRavenFlight, type Channel, type DeploySettings } from "./parsers/blueRaven";
 import type { Replay3D, CameraMode } from "./replay3d";
 import { Charts } from "./charts";
 import { loadAndAnalyze } from "./background";
@@ -17,7 +17,9 @@ import { getVehicle, setVehicle, vehicleKeyOf } from "./vehicle";
 import { checkSettings } from "./settingsCheck";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
-import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
+import { isGenericAlt, parseGenericAlt } from "./parsers/genericAlt";
+import { isGpsLog, isGpsSummary } from "./parsers/featherweightGps";
+import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
 import { evaluate, loadDefaultRecovery, saveDefaultRecovery, type RecoveryConfig } from "./recovery";
@@ -176,6 +178,13 @@ async function fromFileList(list: FileList | File[]) {
     preflight(files[0]);
     return;
   }
+  // another brand of altimeter: it can be compared against a Blue Raven flight, not opened alone
+  const notBR = files.length > 0 && files.every((f) => f.text && identifyText(f.text) === "unknown" && !isOpenRocket(f.text) && !isGpsLog(f.text) && !isGpsSummary(f.text) && isGenericAlt(f.text));
+  if (notBR) {
+    if (flight) { await loadCompare(files); return; }
+    showWarnings([`${files[0].name} looks like another altimeter's log. Open a Blue Raven flight (or a sample) first, then drop it again to compare.`]);
+    return;
+  }
   // an OpenRocket export dropped onto a loaded flight is a comparison, not a new flight
   if (flight && files.length > 0 && files.every((f) => f.text && isOpenRocket(f.text))) {
     await loadCompare(files);
@@ -189,8 +198,12 @@ async function loadCompare(files: InFile[]) {
   try {
     const sim = files.find((f) => f.text && isOpenRocket(f.text));
     let trace: CompareTrace;
+    const brLike = files.some((f) => f.text && identifyText(f.text) !== "unknown");
+    const other = !brLike ? files.find((f) => f.text && isGenericAlt(f.text)) : undefined;
     if (sim) {
       trace = traceFromSim(parseOpenRocket(sim.text!, sim.name));
+    } else if (other) {
+      trace = traceFromAltimeter(parseGenericAlt(other.text!, other.name));
     } else {
       setLoading("Reading comparison flight");
       const res = await loadAndAnalyze(files).finally(() => setLoading(null));

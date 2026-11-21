@@ -6,6 +6,7 @@ import { indexAt, lowerBound } from "./analysis";
 import type { BlueRavenFlight } from "./parsers/blueRaven";
 import type { SimData } from "./parsers/openRocket";
 import { conv } from "./units";
+import type { AltTrace } from "./parsers/genericAlt";
 
 export interface KeyNumbers {
   apogee: number | null; // ft AGL
@@ -244,4 +245,50 @@ export function whatChanged(mine: KeyNumbers, other: KeyNumbers, otherName: stri
   let s = top.length ? `Against ${otherName}, this flight ${list(top)}.` : `This flight matches ${otherName} within 5% on every number.`;
   if (top.length && same.length) s += ` ${list(same.slice(0, 3)).replace(/^./, (c) => c.toUpperCase())} ${same.length === 1 ? "matches" : "match"} within 5%.`;
   return s;
+}
+
+/** comparison trace from another brand of altimeter (time + altitude CSV) */
+export function traceFromAltimeter(s: AltTrace): CompareTrace {
+  const n = s.t.length;
+  let iA = 0;
+  for (let i = 0; i < n; i++) if (s.alt[i] > s.alt[iA]) iA = i;
+  const tApo = s.t[iA];
+  // landing: first time after apogee within 15 ft of the ground
+  let iL = n - 1;
+  for (let i = iA; i < n; i++) if (s.alt[i] < 15) { iL = i; break; }
+  const tGround = s.t[iL];
+  // two descent rates when the log shows a clear slow-down (drogue then main)
+  const rate = (a: number, b: number) => (b - a > 1 ? slope(s.t, s.alt, a, b) : null);
+  let tMain: number | null = null;
+  const early = rate(tApo + 3, tApo + 3 + (tGround - tApo - 3) * 0.4);
+  const late = rate(tGround - Math.max(2, (tGround - tApo) * 0.3), tGround - 1);
+  if (early !== null && late !== null && Math.abs(early) > 1.8 * Math.abs(late)) {
+    const mid = (Math.abs(early) + Math.abs(late)) / 2;
+    // the main is open once the fall rate stays below the midpoint for 3 s straight
+    const rateAt = (i: number) => { let j = i; while (j < iL && s.t[j] - s.t[i] < 1) j++; return s.t[j] > s.t[i] ? Math.abs((s.alt[j] - s.alt[i]) / (s.t[j] - s.t[i])) : Infinity; };
+    for (let i = iA; i < iL && tMain === null; i++) {
+      if (s.t[i] < tApo + 3 || rateAt(i) >= mid) continue;
+      let ok = true;
+      for (let k = i; k < iL && s.t[k] - s.t[i] < 3; k++) if (rateAt(k) >= mid) { ok = false; break; }
+      if (ok) tMain = s.t[i];
+    }
+  }
+  let maxV: number | null = null;
+  for (let i = 0; i <= iA; i++) if (Number.isFinite(s.vVert[i]) && (maxV === null || s.vVert[i] > maxV)) maxV = s.vVert[i];
+  return {
+    kind: "flight",
+    name: s.name,
+    t: s.t, alt: s.alt, vVert: s.vVert,
+    compass: false,
+    events: [{ label: "Apogee", t: tApo }, ...(tMain !== null ? [{ label: "Main (from descent rate)", t: tMain }] : []), { label: "Landing", t: tGround }],
+    align: { apogee: tApo, main: tMain },
+    key: {
+      apogee: s.alt[iA], tApogee: tApo, maxVel: maxV, maxAccel: null, burnout: null,
+      drogueRate: tMain !== null ? rate(tApo + 3, tMain - 0.5) : rate(tApo + 3, tGround - 1),
+      mainAlt: tMain !== null ? s.alt[indexAt(s.t, tMain)] : null,
+      mainRate: tMain !== null ? rate(tMain + 3, tGround - 1) : null,
+      flightTime: tGround, drift: null,
+    },
+    notes: [...s.notes, "Other altimeter: altitude and vertical speed only, no attitude or position."],
+  };
 }
