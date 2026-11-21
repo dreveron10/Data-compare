@@ -195,3 +195,23 @@ select { background: var(--panel-2); color: var(--text); border: 1px solid var(-
 .btn.danger:hover { border-color: var(--bad); color: var(--bad); }
 .lib-empty { padding: 30px; text-align: center; color: var(--muted); }
 .lib-table td:first-child { white-space: nowrap; }
+
+/* recovery check */
+.metrics.rec td:nth-child(2) { font-family: var(--num); font-size: 15px; white-space: nowrap; padding-left: 8px; }
+.metrics.rec td:nth-child(4) { padding-left: 6px; }
+.metrics.rec td small { display: block; color: var(--muted); font-size: 11px; }
+.metrics.rec td:nth-child(3) { color: var(--muted); font-size: 12px; text-align: right; white-space: nowrap; }
+.verdict { display: inline-block; min-width: 38px; text-align: center; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 5px; }
+.verdict.pass { background: rgba(123, 216, 143, 0.15); color: var(--good); }
+.verdict.fail { background: rgba(255, 122, 144, 0.16); color: var(--bad); }
+.verdict.na { color: var(--muted); }
+.rec-edit { margin-top: 10px; font-size: 13px; }
+.rec-edit summary { cursor: pointer; color: var(--accent); }
+.rec-row { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+.rec-row input, .rec-limits input { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13px; }
+.rec-row input.name { flex: 1; min-width: 0; }
+.rec-row input.mass { width: 70px; }
+.rec-row .x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; }
+.rec-limits { display: grid; gap: 6px; margin: 10px 0 4px; }
+.rec-limits label { display: grid; grid-template-columns: 1fr 80px 42px; align-items: center; gap: 6px; color: var(--muted); }
+.rec-limits input { width: 80px; }

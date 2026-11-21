@@ -2,6 +2,7 @@
 // opening it later re-runs the same analysis. Backups are a .zip of all entries.
 
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import type { RecoveryConfig } from "./recovery";
 
 export interface StoredFile { name: string; text?: string; buffer?: ArrayBuffer }
 
@@ -14,6 +15,8 @@ export interface LibraryEntry {
   savedAt: string; // ISO
   stats: { apogee?: number | null; flightTime?: number | null; drift?: number | null; maxVel?: number | null; hasGps?: boolean };
   files: StoredFile[];
+  /** recovery check setup for this vehicle (section masses, limits) */
+  recovery?: RecoveryConfig;
 }
 
 const DB = "data-compare";

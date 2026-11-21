@@ -6,6 +6,7 @@ import { Charts } from "./charts";
 import { KEY_ROWS, keyNumbersOf, traceFromFlight, traceFromSim, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earth";
+import { evaluate, loadDefaultRecovery, saveDefaultRecovery, type RecoveryConfig } from "./recovery";
 import {
   deleteEntry, exportBackup, getEntry, importBackup, listEntries, newId, putEntry, requestPersistence, storageUse,
   type LibraryEntry,
@@ -44,6 +45,7 @@ let cmp: CompareTrace | undefined;
 let lastFiles: InFile[] = [];
 let cmpFiles: InFile[] | undefined;
 let currentEntryId: string | undefined;
+let recovery: RecoveryConfig = loadDefaultRecovery();
 
 // ---------- Earth view (terrain + imagery) ----------
 let satOn = true;
@@ -90,6 +92,7 @@ async function loadFiles(files: InFile[], entryId?: string) {
     A = a;
     lastFiles = files;
     currentEntryId = entryId;
+    if (!entryId) recovery = loadDefaultRecovery();
     $("save-open").hidden = false;
     $("save-open").textContent = entryId ? "Edit saved flight" : "Save flight";
     showFlight();
@@ -227,6 +230,7 @@ function showFlight() {
   $("lg-x").textContent = A.compass ? "East" : "Downrange";
   $("lg-z").textContent = A.compass ? "North" : "Crossrange";
   renderMetrics();
+  renderRecovery();
   renderGps();
   renderEvents();
   renderSettings();
@@ -252,6 +256,58 @@ function renderMetrics() {
     return `<tr${m.note ? ` title="${escapeHtml(m.note)}"` : ""}><td>${escapeHtml(m.label)}</td><td>${fmt(m.site, m.unit)}</td><td>${fmt(m.device, m.unit)}</td><td>${diff}</td><td class="unit">${m.unit}</td></tr>`;
   });
   $("metrics").innerHTML = `<tr><th>Metric</th><th>Site</th><th>Blue Raven</th><th>Δ</th><th></th></tr>${rows.join("")}`;
+}
+
+// ---------- recovery check ----------
+function recoveryInputs() {
+  const k = keyNumbersOf(A!);
+  const apo = A!.events.find((e) => e.key === "apogee")?.t;
+  const land = A!.events.find((e) => e.key === "landing")?.t;
+  return {
+    apogee: k.apogee,
+    landingSpeed: k.mainRate !== null ? Math.abs(k.mainRate) : null,
+    descentTime: apo !== undefined && land !== undefined ? land - apo : null,
+    drift: k.drift,
+  };
+}
+
+function renderRecovery() {
+  $("rec-panel").hidden = !A;
+  if (!A) return;
+  const x = recoveryInputs();
+  $("rec-sub").textContent = x.landingSpeed !== null
+    ? `Landing speed ${x.landingSpeed.toFixed(1)} ft/s, from the main descent fit.`
+    : "No main descent found, so landing energy can't be computed.";
+  const r = evaluate(recovery, x);
+  $("rec-table").innerHTML = r.rows
+    .map((row) => `<tr${row.note ? ` title="${escapeHtml(row.note)}"` : ""}><td>${escapeHtml(row.label)}${row.sub ? `<small>${escapeHtml(row.sub)}</small>` : ""}</td><td>${escapeHtml(row.value)}</td><td>${escapeHtml(row.limit)}</td><td><span class="verdict ${row.verdict}">${row.verdict === "pass" ? "Pass" : row.verdict === "fail" ? "Over" : "-"}</span></td></tr>`)
+    .join("");
+  // editor
+  $("rec-sections").innerHTML = recovery.sections
+    .map((sct, i) => `<div class="rec-row"><input class="name" data-i="${i}" data-f="name" value="${escapeHtml(sct.name)}" aria-label="Section name" /><input class="mass" type="number" step="0.1" data-i="${i}" data-f="mass" value="${sct.massLb}" aria-label="Mass in lb" /> lb<button class="x" type="button" data-rm="${i}" aria-label="Remove section">×</button></div>`)
+    .join("");
+  $<HTMLInputElement>("rec-target").value = recovery.targetApogeeFt ? String(recovery.targetApogeeFt) : "";
+  $<HTMLInputElement>("rec-ke").value = String(recovery.keLimit);
+  $<HTMLInputElement>("rec-desc").value = String(recovery.descentLimit);
+  $<HTMLInputElement>("rec-drift").value = String(recovery.driftLimit);
+}
+
+async function recoveryChanged() {
+  renderRecoveryTableOnly();
+  if (currentEntryId) {
+    const e = await getEntry(currentEntryId);
+    if (e) await putEntry({ ...e, recovery });
+  }
+}
+function renderRecoveryTableOnly() {
+  // re-render without rebuilding the inputs the user is typing in
+  const keepFocus = document.activeElement as HTMLElement | null;
+  const x = recoveryInputs();
+  const r = evaluate(recovery, x);
+  $("rec-table").innerHTML = r.rows
+    .map((row) => `<tr${row.note ? ` title="${escapeHtml(row.note)}"` : ""}><td>${escapeHtml(row.label)}${row.sub ? `<small>${escapeHtml(row.sub)}</small>` : ""}</td><td>${escapeHtml(row.value)}</td><td>${escapeHtml(row.limit)}</td><td><span class="verdict ${row.verdict}">${row.verdict === "pass" ? "Pass" : row.verdict === "fail" ? "Over" : "-"}</span></td></tr>`)
+    .join("");
+  keepFocus?.focus();
 }
 
 function renderGps() {
@@ -520,6 +576,40 @@ $("cmp-sample").addEventListener("click", async () => {
 });
 $("cmp-clear").addEventListener("click", () => { cmp = undefined; cmpFiles = undefined; applyCompare(); });
 
+$("rec-sections").addEventListener("input", (e) => {
+  const el = e.target as HTMLInputElement;
+  const i = Number(el.dataset.i);
+  if (!recovery.sections[i]) return;
+  if (el.dataset.f === "name") recovery.sections[i].name = el.value;
+  else recovery.sections[i].massLb = parseFloat(el.value) || 0;
+  recoveryChanged();
+});
+$("rec-sections").addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest("[data-rm]") as HTMLElement | null;
+  if (!b) return;
+  recovery.sections.splice(Number(b.dataset.rm), 1);
+  renderRecovery();
+  recoveryChanged();
+});
+$("rec-add").addEventListener("click", () => {
+  recovery.sections.push({ name: `Section ${recovery.sections.length + 1}`, massLb: 10 });
+  renderRecovery();
+  recoveryChanged();
+});
+for (const [id, key] of [["rec-target", "targetApogeeFt"], ["rec-ke", "keLimit"], ["rec-desc", "descentLimit"], ["rec-drift", "driftLimit"]] as const) {
+  $<HTMLInputElement>(id).addEventListener("input", (e) => {
+    const v = parseFloat((e.target as HTMLInputElement).value);
+    if (key === "targetApogeeFt") recovery.targetApogeeFt = Number.isFinite(v) && v > 0 ? v : null;
+    else if (Number.isFinite(v) && v > 0) recovery[key] = v;
+    recoveryChanged();
+  });
+}
+$("rec-default").addEventListener("click", () => {
+  saveDefaultRecovery(recovery);
+  $("rec-default").textContent = "Saved as default";
+  setTimeout(() => ($("rec-default").textContent = "Use for new flights too"), 1800);
+});
+
 // ---------- library (saved in this browser) ----------
 const saveDlg = $<HTMLDialogElement>("save-dialog");
 const libDlg = $<HTMLDialogElement>("lib-dialog");
@@ -562,6 +652,7 @@ $("save-form").addEventListener("submit", async (e) => {
     savedAt: new Date().toISOString(),
     stats: { apogee: k.apogee, flightTime: k.flightTime, drift: k.drift, maxVel: k.maxVel, hasGps: !!flight.gps },
     files: lastFiles,
+    recovery,
   };
   try {
     await putEntry(entry);
@@ -619,6 +710,7 @@ $("lib-list").addEventListener("click", async (ev) => {
   if (b.dataset.act === "open") {
     libDlg.close();
     setBusy(true);
+    recovery = entry.recovery ?? loadDefaultRecovery();
     try { await loadFiles(entry.files, entry.id); } finally { setBusy(false); }
   } else if (b.dataset.act === "cmp") {
     libDlg.close();

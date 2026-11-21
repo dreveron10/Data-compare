@@ -84,6 +84,24 @@
           <div class="muted small">Site value vs what the Blue Raven reported</div>
           <table class="metrics" id="metrics"></table>
         </div>
+        <div class="panel" id="rec-panel" hidden>
+          <h3>Recovery check</h3>
+          <div class="muted small" id="rec-sub"></div>
+          <table class="metrics rec" id="rec-table"></table>
+          <details class="rec-edit">
+            <summary>Edit sections and limits</summary>
+            <div id="rec-sections"></div>
+            <button class="btn small-btn" id="rec-add" type="button">Add section</button>
+            <div class="rec-limits">
+              <label>Target apogee <input type="number" id="rec-target" /> ft</label>
+              <label>Max KE per section <input type="number" id="rec-ke" /> ft-lbf</label>
+              <label>Max descent time <input type="number" id="rec-desc" /> s</label>
+              <label>Max drift <input type="number" id="rec-drift" /> ft</label>
+            </div>
+            <p class="muted small">Check these against your current handbook. Changes are kept with this flight when it is saved in the library.</p>
+            <button class="btn small-btn" id="rec-default" type="button">Use for new flights too</button>
+          </details>
+        </div>
         <div class="panel" id="cmp-panel" hidden>
           <h3>Compare</h3>
           <div class="muted small" id="cmp-sub">Overlay an OpenRocket simulation export or another Blue Raven flight. Both are aligned at liftoff.</div>
