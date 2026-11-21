@@ -8,6 +8,7 @@ import { findFindings } from "./findings";
 import { conv, cu, getUnits, onUnitsChange, setUnits, show } from "./units";
 import { windProfile, compassName } from "./wind";
 import { coastDrag } from "./coast";
+import { checkSettings } from "./settingsCheck";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
@@ -682,7 +683,13 @@ function renderSettings() {
     const when = fire ? `fired T+${fire.t.toFixed(2)} s` : "did not fire";
     return `<div class="settings-ch"><h3>${ch} <span class="muted small">(${when}${delay})</span></h3>${chips || '<span class="muted small">no conditions</span>'}</div>`;
   }).join("");
-  $("settings").innerHTML = `<div class="muted small">All conditions must be true to fire. Green/red shows the logged state in the 0.15 s before each fire.</div>${html}`;
+  const issues = checkSettings(s);
+  const check = `<div class="set-check"><h3 class="sub-h">Settings check</h3>${
+    issues.length
+      ? `<ul>${issues.map((i) => `<li class="${i.level}"><b>${escapeHtml(i.title)}</b><span>${escapeHtml(i.detail)}</span></li>`).join("")}</ul>`
+      : '<p class="muted small">No common setup problems found: each event has a backup that fires after its primary, nothing can fire on the way up, and mains open at a reasonable altitude.</p>'
+  }</div>`;
+  $("settings").innerHTML = `${check}<div class="muted small" style="margin-top:12px">All conditions must be true to fire. Green/red shows the logged state in the 0.15 s before each fire.</div>${html}`;
 }
 
 function renderScrubEvents() {

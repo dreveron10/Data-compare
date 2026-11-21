@@ -488,3 +488,11 @@ li[tabindex="0"] { cursor: pointer; }
 .cmp-summary { margin: 8px 0 4px; display: grid; gap: 6px; }
 .cmp-summary p { margin: 0; font-size: 13.5px; line-height: 1.5; color: #d6deec; max-width: 62ch; }
 .cmp-summary .sw { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin: 0 7px 3px 0; vertical-align: middle; }
+
+/* settings check */
+.set-check .sub-h { margin-top: 6px; }
+.set-check ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.set-check li { padding: 7px 10px; border-radius: 8px; background: var(--panel-2); border-left: 3px solid var(--accent); font-size: 13px; line-height: 1.45; }
+.set-check li.warn { border-left-color: var(--signal); }
+.set-check li b { display: block; font-weight: 600; margin-bottom: 2px; }
+.set-check li span { color: #c3cde0; }
