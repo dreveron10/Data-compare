@@ -1,5 +1,5 @@
-// A short first-visit walk through the four things people miss: the timeline, the camera views,
-// the findings, and saving. Shown once after the first flight loads; can be replayed.
+// A short first-visit walk through the things people miss: the timeline, the camera views,
+// the findings, comparing, saving and the library. Shown once after the first flight loads; can be replayed.
 const KEY = "dc.toured";
 
 interface Step { sel: string; title: string; text: string; place: "above" | "below" | "left" }
@@ -7,7 +7,9 @@ const STEPS: Step[] = [
   { sel: ".transport", title: "The timeline drives everything", text: "Drag it, press Space to play, or use , and . to hop between events. The 3D view, charts and readout all follow it.", place: "above" },
   { sel: "#cam-modes, .cam-modes", title: "Change the view", text: "Follow chases the rocket, Overview shows the whole flight, Ground is the view from the pad. Earth drapes it on satellite terrain.", place: "below" },
   { sel: "#find-panel", title: "Start with the findings", text: "Things worth a look, each tied to a moment in the flight. Click one to jump there.", place: "left" },
+  { sel: "#cmp-panel", title: "Compare it", text: "Add an OpenRocket sim, another flight or a second altimeter from the same rocket. You get a plain-words summary, Student Launch checks side by side, and, for two units in one rocket, how well they agree.", place: "left" },
   { sel: "#save-open", title: "Keep it", text: "Save the flight to this browser's library to reopen it, compare it with others or share it with the team.", place: "below" },
+  { sel: "#lib-open", title: "Your library", text: "Saved flights with search, tags and trends per vehicle. Pin one as a vehicle's reference, refresh stored numbers after changing masses, and export a backup now and then.", place: "below" },
 ];
 
 export function tourSeen(): boolean {
