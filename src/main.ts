@@ -490,7 +490,7 @@ function gpsHud(time: number) {
   const k = indexAt(g.t, time);
   return `
     <div><div class="k">Drift from pad</div><div class="v">${d.distance[k].toFixed(0)}<small>ft</small></div></div>
-    <div><div class="k">GPS satellites</div><div class="v">${d.sats[k]}</div></div>`;
+    <div class="gps-sats"><div class="k">GPS satellites</div><div class="v">${d.sats[k]}</div></div>`;
 }
 
 // ---------- playback ----------

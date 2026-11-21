@@ -177,7 +177,7 @@ export class Charts {
     h.querySelector('[data-x="png"]')!.addEventListener("click", () => this.exportPng(u, d));
     const self = this;
     const opts: uPlot.Options = {
-      width: Math.max(300, this.host.clientWidth - 8),
+      width: Math.max(240, this.host.clientWidth - 8),
       height: 190,
       cursor: { sync: { key: SYNC_KEY }, drag: { x: true, y: false } },
       legend: { live: true },
@@ -321,7 +321,7 @@ export class Charts {
   }
 
   private resize() {
-    const w = Math.max(300, this.host.clientWidth - 8);
+    const w = Math.max(240, this.host.clientWidth - 8);
     for (const p of this.plots) p.setSize({ width: w, height: 190 });
   }
 }
