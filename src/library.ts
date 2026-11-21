@@ -12,6 +12,9 @@ export interface LibraryEntry {
   name: string;
   date: string; // YYYY-MM-DD
   notes: string;
+  vehicle?: string;
+  motor?: string;
+  tags?: string[];
   savedAt: string; // ISO
   stats: { apogee?: number | null; flightTime?: number | null; drift?: number | null; maxVel?: number | null; hasGps?: boolean };
   files: StoredFile[];

@@ -757,6 +757,14 @@ $("save-open").addEventListener("click", async () => {
   $<HTMLInputElement>("save-name").value = existing?.name ?? flight.gps?.name ?? flight.name;
   $<HTMLInputElement>("save-date").value = existing?.date ?? flightDate();
   $<HTMLTextAreaElement>("save-notes").value = existing?.notes ?? "";
+  $<HTMLInputElement>("save-vehicle").value = existing?.vehicle ?? "";
+  $<HTMLInputElement>("save-motor").value = existing?.motor ?? "";
+  $<HTMLInputElement>("save-tags").value = (existing?.tags ?? []).join(", ");
+  // suggestions from what's already in the library
+  const all = await listEntries();
+  const opts = (vals: (string | undefined)[]) => [...new Set(vals.filter(Boolean))].map((v) => `<option value="${escapeHtml(v!)}"></option>`).join("");
+  $("dl-vehicles").innerHTML = opts(all.map((x) => x.vehicle));
+  $("dl-motors").innerHTML = opts(all.map((x) => x.motor));
   const sims = cmps.filter((c) => c.trace.kind === "sim");
   const simOk = !existing && sims.length > 0;
   $("save-sim-row").hidden = !simOk;
@@ -772,10 +780,13 @@ $("save-form").addEventListener("submit", async (e) => {
   const name = $<HTMLInputElement>("save-name").value.trim() || flight.name;
   const date = $<HTMLInputElement>("save-date").value;
   const notes = $<HTMLTextAreaElement>("save-notes").value.trim();
+  const vehicle = $<HTMLInputElement>("save-vehicle").value.trim() || undefined;
+  const motor = $<HTMLInputElement>("save-motor").value.trim() || undefined;
+  const tags = $<HTMLInputElement>("save-tags").value.split(",").map((x) => x.trim()).filter(Boolean);
   const k = keyNumbersOf(A);
   const entry: LibraryEntry = {
     id: currentEntryId ?? newId(),
-    kind: "flight", name, date, notes,
+    kind: "flight", name, date, notes, vehicle, motor, tags,
     savedAt: new Date().toISOString(),
     stats: { apogee: k.apogee, flightTime: k.flightTime, drift: k.drift, maxVel: k.maxVel, hasGps: !!flight.gps },
     files: lastFiles,
@@ -805,19 +816,43 @@ $("save-form").addEventListener("submit", async (e) => {
 const num = (v: number | null | undefined, d = 0) => (v === null || v === undefined || !Number.isFinite(v) ? "-" : v.toFixed(d));
 
 async function renderLibrary() {
-  const list = await listEntries();
+  const all = await listEntries();
+  const q = $<HTMLInputElement>("lib-search").value.trim().toLowerCase();
+  const kind = $<HTMLSelectElement>("lib-kind").value;
+  const sort = $<HTMLSelectElement>("lib-sort").value;
+  const hay = (e: LibraryEntry) => [e.name, e.notes, e.motor, e.vehicle, ...(e.tags ?? []), e.date].join(" ").toLowerCase();
+  let list = all.filter((e) => (kind === "all" || e.kind === kind) && (!q || q.split(/\s+/).every((w) => hay(e).includes(w))));
+  const apo = (e: LibraryEntry) => e.stats.apogee ?? -Infinity;
+  list = list.sort((a, b) =>
+    sort === "date-asc" ? (a.date || "").localeCompare(b.date || "")
+    : sort === "apogee-desc" ? apo(b) - apo(a)
+    : sort === "apogee-asc" ? apo(a) - apo(b)
+    : sort === "name" ? a.name.localeCompare(b.name)
+    : (b.date || "").localeCompare(a.date || "") || b.savedAt.localeCompare(a.savedAt));
+  // highlight search words
+  const hl = (text: string) => {
+    let h = escapeHtml(text);
+    if (!q) return h;
+    for (const w of q.split(/\s+/).filter((x) => x.length > 1)) {
+      h = h.replace(new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m) => `<mark>${m}</mark>`);
+    }
+    return h;
+  };
   const el = $("lib-list");
-  if (list.length === 0) {
+  if (all.length === 0) {
     el.innerHTML = '<div class="lib-empty">No saved flights yet. Load a flight and press <b>Save flight</b>.</div>';
+  } else if (list.length === 0) {
+    el.innerHTML = '<div class="lib-empty">Nothing matches. Try fewer words or show flights and sims.</div>';
   } else {
     el.innerHTML = `<table class="lib-table"><tr><th>Date</th><th>Name</th><th style="text-align:right">Apogee</th><th style="text-align:right">Flight time</th><th style="text-align:right">Drift</th><th>Notes</th><th></th></tr>${list
       .map((e) => `<tr class="${e.id === currentEntryId ? "current" : ""}">
         <td>${escapeHtml(e.date || "-")}</td>
-        <td>${escapeHtml(e.name)}${e.kind === "sim" ? '<span class="tag">SIM</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}</td>
+        <td>${hl(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}
+          <div class="chips">${e.vehicle ? `<span class="chipline">${hl(e.vehicle)}</span>` : ""}${e.motor ? `<span class="chipline">${hl(e.motor)}</span>` : ""}${(e.tags ?? []).map((tg) => `<span class="chipline tagc">${hl(tg)}</span>`).join("")}</div></td>
         <td class="num">${num(e.stats.apogee)} ft</td>
         <td class="num">${num(e.stats.flightTime, 1)} s</td>
         <td class="num">${e.stats.drift != null ? num(e.stats.drift) + " ft" : "-"}</td>
-        <td class="notes">${escapeHtml(e.notes)}</td>
+        <td class="notes">${hl(e.notes)}</td>
         <td class="acts">
           ${e.kind === "flight" ? `<button class="btn small-btn" data-act="open" data-id="${e.id}">Open</button>` : ""}
           <button class="btn small-btn" data-act="cmp" data-id="${e.id}" ${!A || e.id === currentEntryId ? "disabled" : ""}>Compare</button>
@@ -826,8 +861,11 @@ async function renderLibrary() {
       .join("")}</table>`;
   }
   const u = await storageUse();
-  $("lib-usage").textContent = `${list.length} saved${u ? `, ${(u.used / 1048576).toFixed(1)} MB used of ${(u.quota / 1073741824).toFixed(1)} GB available` : ""}`;
+  $("lib-usage").textContent = `${list.length === all.length ? `${all.length} saved` : `${list.length} of ${all.length} shown`}${u ? `, ${(u.used / 1048576).toFixed(1)} MB used of ${(u.quota / 1073741824).toFixed(1)} GB available` : ""}`;
 }
+$("lib-search").addEventListener("input", () => renderLibrary());
+$("lib-kind").addEventListener("change", () => renderLibrary());
+$("lib-sort").addEventListener("change", () => renderLibrary());
 
 $("lib-open").addEventListener("click", async () => { await renderLibrary(); libDlg.showModal(); });
 $("lib-close").addEventListener("click", () => libDlg.close());

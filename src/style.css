@@ -17,6 +17,7 @@
   background: var(--bg);
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body { min-height: 100vh; }
 .muted { color: var(--muted); }
@@ -263,3 +264,12 @@ kbd { font: inherit; font-size: 12px; background: var(--panel-2); border: 1px so
   #report .foot { margin-top: 14px; color: #6b7891; font-size: 8.5pt; }
   #report section { break-inside: avoid; }
 }
+
+/* library tools */
+.fld-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lib-tools { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.lib-tools input[type="search"] { flex: 1; min-width: 220px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 14px; }
+.lib-table .chips { margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px; }
+.chipline { font-size: 11px; color: var(--muted); background: var(--panel-2); border-radius: 4px; padding: 1px 6px; }
+.chipline.tagc { color: var(--accent); }
+mark { background: rgba(255, 122, 26, 0.28); color: inherit; border-radius: 2px; }

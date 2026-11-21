@@ -179,7 +179,13 @@
         <p class="muted small">Saved in this browser only. The original files are stored, so opening it later gives the same analysis.</p>
         <label class="fld">Name<input id="save-name" required maxlength="120" /></label>
         <label class="fld">Flight date<input id="save-date" type="date" /></label>
-        <label class="fld">Notes<textarea id="save-notes" rows="4" placeholder="Motor, launch site, weather, what went right or wrong..."></textarea></label>
+        <div class="fld-row">
+          <label class="fld">Vehicle<input id="save-vehicle" list="dl-vehicles" maxlength="60" placeholder="Fullscale, subscale..." /></label>
+          <label class="fld">Motor<input id="save-motor" list="dl-motors" maxlength="40" placeholder="L1520T" /></label>
+        </div>
+        <label class="fld">Tags<input id="save-tags" maxlength="120" placeholder="competition, demo flight (comma separated)" /></label>
+        <datalist id="dl-vehicles"></datalist><datalist id="dl-motors"></datalist>
+        <label class="fld">Notes<textarea id="save-notes" rows="4" placeholder="Launch site, weather, what went right or wrong..."></textarea></label>
         <label class="chk" id="save-sim-row" hidden><input type="checkbox" id="save-sim" checked /> <span id="save-sim-label"></span></label>
         <div class="muted small" id="save-files"></div>
         <div class="dlg-actions">
@@ -195,6 +201,21 @@
         <button class="btn small-btn" id="lib-close">Close</button>
       </div>
       <p class="muted small">Flights saved in this browser. Export a backup now and then: clearing browser data deletes the library.</p>
+      <div class="lib-tools">
+        <input type="search" id="lib-search" placeholder="Search name, motor, vehicle, tags, notes" aria-label="Search the library" />
+        <select id="lib-kind" aria-label="Show">
+          <option value="all">Flights and sims</option>
+          <option value="flight">Flights only</option>
+          <option value="sim">Sims only</option>
+        </select>
+        <select id="lib-sort" aria-label="Sort by">
+          <option value="date-desc">Newest first</option>
+          <option value="date-asc">Oldest first</option>
+          <option value="apogee-desc">Highest apogee</option>
+          <option value="apogee-asc">Lowest apogee</option>
+          <option value="name">Name A to Z</option>
+        </select>
+      </div>
       <div class="lib-list" id="lib-list"></div>
       <div class="dlg-actions spread">
         <span class="muted small" id="lib-usage"></span>
