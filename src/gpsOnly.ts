@@ -1,5 +1,6 @@
 // A Featherweight GPS log on its own (no Blue Raven): summary numbers, a top-down track and an
 // altitude profile, the landing card, wind from the drift, and a GPX file for the recovery walk.
+import { buildKml } from "./kml";
 import type { GpsData } from "./parsers/featherweightGps";
 import { compassName } from "./wind";
 import { show } from "./units";
@@ -68,7 +69,7 @@ function svgProfile(g: GpsData): string {
   return `<svg viewBox="0 0 ${W} ${H}" class="gps-track" role="img" aria-label="GPS altitude over time"><path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2"/><text x="${pad}" y="12" class="lbl">${show(top, "ft")} max</text><text x="${W - pad}" y="${H - 4}" text-anchor="end" class="lbl">${(t1 - t0).toFixed(0)} s</text></svg>`;
 }
 
-export function gpsOnlyHtml(g: GpsData): { html: string; gpx: string } {
+export function gpsOnlyHtml(g: GpsData): { html: string; gpx: string; kml: string } {
   const L = g.n - 1;
   const dist = Math.hypot(g.east[L], g.north[L]);
   const bearing = ((Math.atan2(g.east[L], g.north[L]) * 180) / Math.PI + 360) % 360;
@@ -92,10 +93,12 @@ export function gpsOnlyHtml(g: GpsData): { html: string; gpx: string } {
           <a class="btn small-btn" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">Open in Maps</a>
           <a class="btn small-btn" href="https://www.google.com/maps/dir/?api=1&destination=${q}&travelmode=walking" target="_blank" rel="noopener">Walking directions</a>
           <button class="btn small-btn" type="button" data-gpx>GPX</button>
+          <button class="btn small-btn" type="button" data-kml title="3D track for Google Earth">KML</button>
         </div>
         ${winds.length ? `<h3 class="sub-h">Wind from drift</h3><table class="metrics wind">${winds.map((w) => `<tr><td>${w.lo}-${w.hi} ft</td><td>${w.mph.toFixed(0)} mph</td><td>${compassName(w.from)} ${w.from.toFixed(0)}°</td></tr>`).join("")}</table><p class="muted small">From the drift after apogee + 8 s. Without the Blue Raven the deployment times aren't known, so the first seconds under each chute are included.</p>` : ""}
       </div>
       <div>${svgTrack(g)}${svgProfile(g)}</div>
     </div>`;
-  return { html, gpx: gpx(g) };
+  const kml = buildKml(g, g.name, null, g.apogeeT ?? Infinity, g.apogeeT !== null && g.apogeeT !== undefined ? [{ label: "Apogee", t: g.apogeeT }] : [], { lat: g.lat[L], lon: g.lon[L] });
+  return { html, gpx: gpx(g), kml };
 }

@@ -37,6 +37,7 @@ import { gpsOnlyHtml } from "./gpsOnly";
 import { gFromMaterial, parseOrk } from "./parsers/ork";
 import { canopySwing } from "./swing";
 import { redundancy, sameFlight } from "./redundancy";
+import { buildKml } from "./kml";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, whatChanged, traceFromAltimeter, sampleAt, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
 import { isOpenRocket, parseOpenRocket } from "./parsers/openRocket";
 import { EARTH_ATTRIBUTION } from "./earthAttrib";
@@ -203,10 +204,11 @@ async function fromFileList(list: FileList | File[]) {
     if (!flight) {
       try {
         const g = parseGpsLog(gpsLogs[0].text!, gpsLogs[0].name.replace(/\.[^.]+$/, ""));
-        const { html, gpx } = gpsOnlyHtml(g);
+        const { html, gpx, kml } = gpsOnlyHtml(g);
         $("gpsonly-title").textContent = `GPS tracker flight: ${g.name}`;
         $("gpsonly-body").innerHTML = html;
         $("gpsonly-body").querySelector("[data-gpx]")?.addEventListener("click", () => downloadBlob(`${fileSlug(g.name)}.gpx`, new Blob([gpx], { type: "application/gpx+xml" })));
+        $("gpsonly-body").querySelector("[data-kml]")?.addEventListener("click", () => downloadBlob(`${fileSlug(g.name)}.kml`, new Blob([kml], { type: "application/vnd.google-earth.kml+xml" })));
         $<HTMLDialogElement>("gpsonly-dialog").showModal();
       } catch (e) { showWarnings([`${gpsLogs[0].name}: ${(e as Error).message}`]); }
       return;
@@ -1158,6 +1160,7 @@ function renderGps() {
         <a class="btn small-btn" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">Open in Maps</a>
         <a class="btn small-btn" href="https://www.google.com/maps/dir/?api=1&destination=${q}&travelmode=walking" target="_blank" rel="noopener">Walking directions</a>
         <button class="btn small-btn" id="land-gpx" type="button" title="Pad and landing as waypoints, plus the flight track, for a phone GPS app">GPX</button>
+        <button class="btn small-btn" id="land-kml" type="button" title="3D ascent and descent with event markers, for Google Earth">KML</button>
       </div>
       <div class="muted small">Pad ${gp.padLat.toFixed(6)}, ${gp.padLon.toFixed(6)}. Landing is the GPS fix at touchdown.</div>
     </div>`;
@@ -1171,6 +1174,11 @@ $("gps-landing").addEventListener("click", async (e) => {
     try { await navigator.clipboard.writeText(txt); tgt.textContent = "Copied"; }
     catch { getSelection()?.selectAllChildren($("land-ll")); tgt.textContent = "Selected"; }
     setTimeout(() => (tgt.textContent = "Copy"), 1500);
+  } else if (tgt.id === "land-kml" && A?.gps && flight?.gps) {
+    const nm = currentEntryName ?? flight.gps.name;
+    const apoT = A.events.find((x) => x.key === "apogee")?.t ?? A.gps.apogeeT;
+    const evs = A.events.filter((x) => x.key !== "apogee_det" && x.key !== "landing").map((x) => ({ label: x.label, t: x.t }));
+    downloadBlob(`${fileSlug(nm)}.kml`, new Blob([buildKml(flight.gps, nm, A.gps.t, apoT, evs, A.gps.landing)], { type: "application/vnd.google-earth.kml+xml" }));
   } else if (tgt.id === "land-gpx" && A?.gps && flight?.gps) {
     const gp = flight.gps, L = A.gps.landing;
     const esc = (x: string) => x.replace(/[<&>]/g, (c) => ({ "<": "&lt;", "&": "&amp;", ">": "&gt;" })[c]!);
