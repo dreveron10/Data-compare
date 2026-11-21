@@ -153,6 +153,16 @@
             <table class="metrics wind" id="wind-table"></table>
           </div>
         </div>
+        <div class="panel" id="coast-panel" hidden>
+          <h3>Coast drag</h3>
+          <div class="muted small" id="coast-sub"></div>
+          <div class="coast-in">
+            <label class="fld sm">Mass after burnout (lb)<input id="coast-mass" type="number" min="0" step="0.1" inputmode="decimal" /></label>
+            <label class="fld sm">Body diameter (in)<input id="coast-dia" type="number" min="0" step="0.01" inputmode="decimal" /></label>
+          </div>
+          <div class="coast-cd" id="coast-cd"></div>
+          <div id="coast-chart"></div>
+        </div>
         <div class="panel" id="cmp-panel" hidden>
           <h3>Compare</h3>
           <div class="muted small" id="cmp-sub">Overlay an OpenRocket simulation export or another Blue Raven flight. Both are aligned at liftoff.</div>

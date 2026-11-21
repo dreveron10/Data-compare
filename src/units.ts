@@ -23,6 +23,7 @@ const TABLE: Record<string, [number, string]> = {
   "ft-lbf": [1.3558179, "J"],
   "lb": [0.45359237, "kg"],
   "mph": [1.609344, "km/h"],
+  "in": [2.54, "cm"],
 };
 
 /** convert a value in an imperial unit to the current system; other units pass through */

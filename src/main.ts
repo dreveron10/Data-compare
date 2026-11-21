@@ -7,6 +7,7 @@ import { loadAndAnalyze } from "./background";
 import { findFindings } from "./findings";
 import { conv, cu, getUnits, onUnitsChange, setUnits, show } from "./units";
 import { windProfile, compassName } from "./wind";
+import { coastDrag } from "./coast";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
@@ -366,6 +367,7 @@ function renderDescent() {
         .join("")}`
     : '<tr><td class="muted">No steady descent found.</td></tr>';
   renderWind();
+  renderCoast();
   const { x, y } = rateVsAltitude(flight, A);
   descPlot?.destroy();
   const host = $("desc-chart");
@@ -397,6 +399,63 @@ function renderWind() {
     .join("")}`;
 }
 const SETTLE_HINT = "The first 4 s after each deployment are skipped while the chute settles.";
+
+// ---------- coast drag ----------
+let coastPlot: uPlot | null = null;
+type CoastCfg = { massLb: number | null; diaIn: number };
+function coastCfg(): CoastCfg {
+  try { const c = JSON.parse(localStorage.getItem("dc.coast") ?? "null"); if (c && typeof c.diaIn === "number") return c; } catch { /* ignore */ }
+  return { massLb: null, diaIn: 6 };
+}
+function renderCoast(rebuildInputs = true) {
+  const ok = !!(A && flight?.hr && A.axialAccel);
+  $("coast-panel").hidden = !ok;
+  if (!ok) return;
+  const cfg = coastCfg();
+  const sectionSum = recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
+  const mass = cfg.massLb ?? sectionSum;
+  if (rebuildInputs) {
+    $<HTMLInputElement>("coast-mass").value = mass ? conv(mass, "lb")[0].toFixed(1) : "";
+    $<HTMLInputElement>("coast-dia").value = conv(cfg.diaIn, "in")[0].toFixed(2);
+    $("coast-mass").parentElement!.firstChild!.textContent = `Mass after burnout (${cu("lb")})`;
+    $("coast-dia").parentElement!.firstChild!.textContent = `Body diameter (${cu("in")})`;
+  }
+  $("coast-sub").textContent = `After burnout the accelerometer reads drag directly, so Cd = 2·m·a / (ρ·v²·A). ${cfg.massLb === null ? "Mass defaults to the recovery section total; enter the real burnout mass." : ""}`;
+  const d = coastDrag(flight!, A!, mass, cfg.diaIn);
+  coastPlot?.destroy();
+  coastPlot = null;
+  const host = $("coast-chart");
+  host.innerHTML = "";
+  if (!d) {
+    $("coast-cd").innerHTML = '<span class="lbl">Not enough coast above 120 ft/s to estimate Cd.</span>';
+    return;
+  }
+  $("coast-cd").innerHTML = `<span class="big">${d.cd50.toFixed(2)}</span><span class="lbl">median Cd, Mach ${d.machMin.toFixed(2)} to ${d.machMax.toFixed(2)}, ${d.n} samples${d.cutBy ? `. Stopped at ${escapeHtml(d.cutBy.label)} (T+${d.cutBy.t.toFixed(2)}), which fired before apogee.` : ""}</span>`;
+  const order = d.mach.map((_, i) => i).sort((i, j) => d.mach[i] - d.mach[j]);
+  coastPlot = new uPlot({
+    width: Math.max(220, host.clientWidth || 320),
+    height: 160,
+    legend: { show: false },
+    cursor: { y: false },
+    scales: { x: { time: false } },
+    axes: [
+      { stroke: "#8d9bb8", label: "Mach", labelSize: 20, size: 34, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: "#8d9bb8", label: "Cd", labelSize: 20, size: 40, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+    ],
+    series: [{}, { stroke: "#f5c26b", width: 0, points: { show: true, size: 3, fill: "#f5c26b", stroke: "#f5c26b" }, paths: () => null }],
+  }, [order.map((i) => d.mach[i]), order.map((i) => d.cd[i])], host);
+}
+function coastInput() {
+  const cfg = coastCfg();
+  const m = parseFloat($<HTMLInputElement>("coast-mass").value);
+  const dia = parseFloat($<HTMLInputElement>("coast-dia").value);
+  if (Number.isFinite(m) && m > 0) cfg.massLb = m / conv(1, "lb")[0];
+  if (Number.isFinite(dia) && dia > 0) cfg.diaIn = dia / conv(1, "in")[0];
+  try { localStorage.setItem("dc.coast", JSON.stringify(cfg)); } catch { /* ignore */ }
+  renderCoast(false);
+}
+$("coast-mass").addEventListener("change", coastInput);
+$("coast-dia").addEventListener("change", coastInput);
 
 // ---------- findings ----------
 function renderFindings() {

@@ -448,3 +448,11 @@ table.wind .bar { position: absolute; left: 0; bottom: -3px; height: 3px; border
   .methods > p.muted { column-span: all; }
 }
 .methods > p:last-child { column-span: all; margin-top: 10px; }
+
+/* coast drag */
+.coast-in { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.coast-in .fld { margin-top: 8px; min-width: 0; }
+.coast-in .fld input { min-width: 0; width: 100%; box-sizing: border-box; }
+.coast-cd { margin: 12px 0 4px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.coast-cd .big { font-family: var(--num); font-size: 30px; font-weight: 600; line-height: 1; }
+.coast-cd .lbl { color: var(--muted); font-size: 13px; }

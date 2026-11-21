@@ -133,6 +133,18 @@ export function findFindings(f: BlueRavenFlight, a: Analysis): Finding[] {
   // 8) data quality
   out.push(...dataQuality(f, a, lift, tLand));
 
+  // a pyro channel that fired well before apogee (while the rocket was still climbing fast)
+  for (const ch of CHANNELS) {
+    const t = fireT[ch];
+    if (t === undefined || !(t > lift) || t > tApo - 1) continue;
+    const i = indexAt(lr.t, t);
+    out.push({
+      level: "warn",
+      title: `${ch} fired before apogee`,
+      detail: `${ch} fired ${(tApo - t).toFixed(1)} s before apogee, climbing at ${lr.velUp[i].toFixed(0)} ft/s at ${a.altSmooth[i].toFixed(0)} ft. If it isn't an intentional event (staging, airbrake), check its conditions and delay.`,
+      t,
+    });
+  }
   out.sort((x, y) => (x.t ?? 1e9) - (y.t ?? 1e9));
   if (!out.some((x) => x.level === "warn")) out.unshift({ level: "good", title: "Nothing unusual found", detail: "Deployments matched their settings and no large shocks, spikes or attitude problems were detected." });
   return out;
