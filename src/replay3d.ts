@@ -775,6 +775,13 @@ export class Replay3D {
     this.insetRenderer.render(this.insetScene, this.insetCam);
   }
 
+  /** render now and return the two canvases, to copy from in the same task (video recording) */
+  frameCanvases(): { main: HTMLCanvasElement; inset: HTMLCanvasElement } {
+    this.renderer.render(this.scene, this.camera);
+    this.insetRenderer.render(this.insetScene, this.insetCam);
+    return { main: this.renderer.domElement, inset: this.insetRenderer.domElement };
+  }
+
   /** current 3D view as an image (renders a frame first so the buffer is fresh) */
   snapshot(): string {
     this.renderer.render(this.scene, this.camera);

@@ -565,3 +565,6 @@ li[tabindex="0"] { cursor: pointer; }
 table.chute td, table.chute th { font-size: 13px; white-space: nowrap; }
 .whatif-in { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .whatif-out { margin-top: 10px; display: grid; gap: 8px; justify-items: start; }
+.rec-btn { color: #ff6b6b; font-size: 13px; }
+.rec-btn.on { background: #ff6b6b; color: #1a0d02; border-color: #ff6b6b; animation: recpulse 1s ease-in-out infinite alternate; }
+@keyframes recpulse { from { opacity: 1; } to { opacity: 0.6; } }

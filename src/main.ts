@@ -15,6 +15,7 @@ import { aeroSeries } from "./aero";
 import { buildExport } from "./exportAll";
 import { diameterFor, diameterFromCdA } from "./chute";
 import { predictLanding } from "./predict";
+import { Recorder, pickMime } from "./record";
 import { vMaxFor } from "./recovery";
 import { startTour, tourSeen } from "./tour";
 import { getVehicle, setVehicle, vehicleKeyOf, vehicleNames } from "./vehicle";
@@ -37,12 +38,13 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const app = $("app");
 // 3D needs WebGL; without it (old GPUs, some remote browsers) the rest of the site still works
 type ReplayApi = Pick<Replay3D, "setFlight" | "setCompare" | "setTime" | "setCameraMode" | "setSatellite" | "snapshot" | "refreshUnitLabels"> & {
+  frameCanvases?: () => { main: HTMLCanvasElement; inset: HTMLCanvasElement };
   onCameraMode?: (mode: CameraMode) => void;
   onSatellite?: (available: boolean, progress: number) => void;
 };
 // The 3D code (three.js renderer, Earth tiles) loads in its own chunk so the page and charts come up
 // first. Until it arrives, this stand-in remembers the latest state and hands it over when ready.
-let replay3d: ReplayApi | null = null;
+let replay3d: Replay3D | null = null;
 const pending: { flight?: [Analysis, BlueRavenFlight]; cmps?: ActiveCompare[]; t?: number; cam?: CameraMode; sat?: boolean } = {};
 const replay: ReplayApi = {
   setFlight(a, f) { pending.flight = [a, f]; replay3d?.setFlight(a, f); },
@@ -51,6 +53,7 @@ const replay: ReplayApi = {
   setCameraMode(m, reset) { pending.cam = m; replay3d?.setCameraMode(m, reset); },
   setSatellite(on) { pending.sat = on; replay3d?.setSatellite(on); },
   snapshot: () => replay3d?.snapshot() ?? "",
+  frameCanvases: () => replay3d!.frameCanvases(),
   refreshUnitLabels() { replay3d?.refreshUnitLabels(); },
 };
 function noWebGL() {
@@ -2018,6 +2021,51 @@ renderRecent();
 // open a sample straight from the URL, e.g. ?sample=SN0614
 const qs = new URLSearchParams(location.search).get("sample");
 if (qs && /^SN\d+$/.test(qs)) loadSample(qs);
+
+// ---------- record the replay as a video ----------
+let recording: { rec: Recorder; stop: boolean } | null = null;
+async function recordVideo() {
+  if (recording) { recording.stop = true; return; }
+  if (!A || !flight) return;
+  const mime = pickMime();
+  if (!mime || !replay3d) { showWarnings(["This browser can't record video here (it needs MediaRecorder and the 3D view). Chrome, Edge and Firefox can."]); return; }
+  pause();
+  const lift = A.events.find((e) => e.key === "liftoff")?.t ?? A.tStart;
+  const land = A.events.find((e) => e.key === "landing")?.t ?? A.tEnd;
+  const t0 = Math.max(A.tStart, lift - 1.5), t1 = Math.min(A.tEnd, land + 2);
+  const speed = parseFloat(speedSel.value);
+  const { main } = replay.frameCanvases!();
+  const rec = new Recorder(main.width, main.height, mime);
+  recording = { rec, stop: false };
+  const btn = $("rec-btn");
+  btn.textContent = "■"; btn.classList.add("on"); btn.setAttribute("aria-label", "Stop recording");
+  const title = `${currentEntryName ?? flight.gps?.name ?? flight.name}${speed !== 1 ? `, ${speed}× speed` : ""}`;
+  let sim = t0, last = performance.now();
+  await new Promise<void>((resolve) => {
+    const frame = (now: number) => {
+      sim = Math.min(t1, sim + ((now - last) / 1000) * speed);
+      last = now;
+      seek(sim);
+      const i = indexAt(flight!.lr!.t, sim);
+      const c = replay.frameCanvases!();
+      rec.draw({
+        main: c.main, inset: c.inset,
+        phase: phaseAt(sim), time: `T${sim < 0 ? "−" : "+"}${Math.abs(sim).toFixed(1)} s`,
+        lines: [`Altitude ${show(A!.altSmooth[i], "ft")}`, `Vertical ${show(flight!.lr!.velUp[i], "ft/s")}`, `Tilt ${flight!.lr!.tilt[i].toFixed(0)}°`],
+        title,
+      });
+      if (sim >= t1 || recording?.stop) { resolve(); return; }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+  rec.stop();
+  const blob = await rec.done;
+  recording = null;
+  btn.textContent = "●"; btn.classList.remove("on"); btn.setAttribute("aria-label", "Record video");
+  downloadBlob(`${fileSlug(currentEntryName ?? flight.gps?.name ?? flight.name)}-replay.webm`, blob);
+}
+$("rec-btn").addEventListener("click", () => recordVideo());
 
 // ---------- offline at the launch field ----------
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
