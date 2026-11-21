@@ -153,6 +153,16 @@
             <table class="metrics wind" id="wind-table"></table>
           </div>
         </div>
+        <div class="panel" id="motor-panel" hidden>
+          <h2>Motor from the accelerometer</h2>
+          <div class="muted small" id="motor-sub"></div>
+          <div class="coast-in">
+            <label class="fld sm">Propellant mass (lb)<input id="motor-prop" type="number" min="0" step="0.01" inputmode="decimal" /></label>
+            <label class="fld sm">Rated total impulse (N·s)<input id="motor-rated" type="number" min="0" step="1" inputmode="decimal" placeholder="optional" /></label>
+          </div>
+          <div class="motor-stats" id="motor-stats"></div>
+          <div id="motor-chart"></div>
+        </div>
         <div class="panel" id="coast-panel" hidden>
           <h2>Coast drag</h2>
           <div class="muted small" id="coast-sub"></div>

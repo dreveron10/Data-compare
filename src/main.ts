@@ -8,6 +8,7 @@ import { findFindings } from "./findings";
 import { conv, cu, getUnits, onUnitsChange, setUnits, show } from "./units";
 import { windProfile, compassName } from "./wind";
 import { coastDrag } from "./coast";
+import { thrustCurve } from "./thrust";
 import { checkSettings } from "./settingsCheck";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
@@ -374,6 +375,7 @@ function renderDescent() {
     : '<tr><td class="muted">No steady descent found.</td></tr>';
   renderWind();
   renderCoast();
+  renderMotor();
   const { x, y } = rateVsAltitude(flight, A);
   descPlot?.destroy();
   const host = $("desc-chart");
@@ -451,6 +453,64 @@ function renderCoast(rebuildInputs = true) {
     series: [{}, { stroke: "#f5c26b", width: 0, points: { show: true, size: 3, fill: "#f5c26b", stroke: "#f5c26b" }, paths: () => null }],
   }, [order.map((i) => d.mach[i]), order.map((i) => d.cd[i])], host);
 }
+// ---------- motor (thrust from the accelerometer) ----------
+let motorPlot: uPlot | null = null;
+type MotorCfg = { propLb: number | null; ratedNs: number | null };
+function motorCfg(): MotorCfg {
+  try { const c = JSON.parse(localStorage.getItem("dc.motor") ?? "null"); if (c) return c; } catch { /* ignore */ }
+  return { propLb: null, ratedNs: null };
+}
+function renderMotor(rebuildInputs = true) {
+  const ok = !!(A && flight?.hr && A.axialAccel);
+  $("motor-panel").hidden = !ok;
+  if (!ok) return;
+  const cc = coastCfg(), mc = motorCfg();
+  const sectionSum = recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
+  const burnout = cc.massLb ?? sectionSum;
+  const prop = mc.propLb ?? 0;
+  if (rebuildInputs) {
+    $<HTMLInputElement>("motor-prop").value = mc.propLb !== null ? conv(mc.propLb, "lb")[0].toFixed(2) : "";
+    $<HTMLInputElement>("motor-rated").value = mc.ratedNs !== null ? String(mc.ratedNs) : "";
+    $("motor-prop").parentElement!.firstChild!.textContent = `Propellant mass (${cu("lb")})`;
+  }
+  const coast = coastDrag(flight!, A!, burnout, cc.diaIn);
+  const cd = coast?.cd50 ?? 0.45;
+  $("motor-sub").textContent = `Thrust = mass × axial acceleration + drag, with drag from ${coast ? `the coast Cd (${cd.toFixed(2)})` : "a Cd of 0.45 (no coast estimate)"}. Uses the burnout mass and diameter from Coast drag${mc.propLb === null ? "; add the propellant mass so the mass falls as it burns" : ""}.`;
+  const th = thrustCurve(flight!, A!, burnout, prop, cc.diaIn, cd);
+  motorPlot?.destroy(); motorPlot = null;
+  const host = $("motor-chart"); host.innerHTML = "";
+  if (!th) { $("motor-stats").innerHTML = '<span class="muted small">No boost phase found.</span>'; return; }
+  const rated = mc.ratedNs;
+  const vsRated = rated ? `${th.impulseNs >= rated ? "+" : ""}${(((th.impulseNs - rated) / rated) * 100).toFixed(0)}% vs rated` : "";
+  const f = (n: number) => (getUnits() === "imperial" ? `${(n / 4.448222).toFixed(0)} lbf` : `${n.toFixed(0)} N`);
+  $("motor-stats").innerHTML = `
+    <div class="wide"><span class="k">Measured class</span><span class="v cls">${th.motorClass}</span></div>
+    <div><span class="k">Total impulse</span><span class="v">${th.impulseNs.toFixed(0)} N·s</span>${vsRated ? `<span class="k">${vsRated}</span>` : ""}</div>
+    <div><span class="k">Burn time</span><span class="v">${th.burnTime.toFixed(2)} s</span></div>
+    <div><span class="k">Average thrust</span><span class="v">${f(th.avgN)}</span></div>
+    <div><span class="k">Peak thrust</span><span class="v">${f(th.peakN)}</span></div>`;
+  const k = getUnits() === "imperial" ? 1 : 4.448222;
+  motorPlot = new uPlot({
+    width: Math.max(220, host.clientWidth || 320), height: 160, legend: { show: false }, cursor: { y: false }, scales: { x: { time: false } },
+    axes: [
+      { stroke: "#8d9bb8", label: "Flight time (s)", labelSize: 20, size: 34, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+      { stroke: "#8d9bb8", label: `Thrust (${getUnits() === "imperial" ? "lbf" : "N"})`, labelSize: 20, size: 48, grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "11px Barlow, system-ui", labelFont: "11px Barlow, system-ui" },
+    ],
+    series: [{}, { stroke: "#ff7a1a", width: 1.5, fill: "rgba(255,122,26,0.12)", points: { show: false } }],
+  }, [th.t, th.thrustLbf.map((x) => x * k)], host);
+}
+function motorInput() {
+  const mc = motorCfg();
+  const p = parseFloat($<HTMLInputElement>("motor-prop").value);
+  const r = parseFloat($<HTMLInputElement>("motor-rated").value);
+  mc.propLb = Number.isFinite(p) && p >= 0 ? p / conv(1, "lb")[0] : null;
+  mc.ratedNs = Number.isFinite(r) && r > 0 ? r : null;
+  try { localStorage.setItem("dc.motor", JSON.stringify(mc)); } catch { /* ignore */ }
+  renderMotor(false);
+}
+$("motor-prop").addEventListener("change", motorInput);
+$("motor-rated").addEventListener("change", motorInput);
+
 function coastInput() {
   const cfg = coastCfg();
   const m = parseFloat($<HTMLInputElement>("coast-mass").value);
@@ -459,6 +519,7 @@ function coastInput() {
   if (Number.isFinite(dia) && dia > 0) cfg.diaIn = dia / conv(1, "in")[0];
   try { localStorage.setItem("dc.coast", JSON.stringify(cfg)); } catch { /* ignore */ }
   renderCoast(false);
+  renderMotor(false);
 }
 $("coast-mass").addEventListener("change", coastInput);
 $("coast-dia").addEventListener("change", coastInput);
