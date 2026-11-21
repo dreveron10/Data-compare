@@ -12,6 +12,7 @@ import { thrustCurve } from "./thrust";
 import { calibHint } from "./calib";
 import { ejectionTimes } from "./ejection";
 import { aeroSeries } from "./aero";
+import { buildExport } from "./exportAll";
 import { startTour, tourSeen } from "./tour";
 import { getVehicle, setVehicle, vehicleKeyOf, vehicleNames } from "./vehicle";
 import { checkSettings } from "./settingsCheck";
@@ -1494,6 +1495,30 @@ async function buildReport() {
   window.print();
 }
 $("report-open").addEventListener("click", () => buildReport());
+
+$("export-all").addEventListener("click", () => {
+  if (!A || !flight) return;
+  const cc = coastCfg(), mc = motorCfg();
+  const mass = cc.massLb ?? recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
+  const coast = flight.hr && A.axialAccel ? coastDrag(flight, A, mass, cc.diaIn) : null;
+  const thrust = flight.hr && A.axialAccel ? thrustCurve(flight, A, mass, mc.propLb ?? 0, cc.diaIn, coast?.cd50 ?? 0.45) : null;
+  const weight = recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0) || null;
+  const extra = {
+    keyNumbers: keyNumbersOf(A),
+    findings: findFindings(flight, A),
+    descent: descentPhases(flight, A, weight),
+    wind: flight.gps ? windProfile(flight.gps, A) : null,
+    vehicle: { name: vehicleLabel || null, ...getVehicle(vehicleKey) },
+    coastDrag: coast ? { cdMedian: coast.cd50, machMin: coast.machMin, machMax: coast.machMax, samples: coast.n } : null,
+    motor: thrust ? { impulseNs: thrust.impulseNs, class: thrust.motorClass, burnTimeS: thrust.burnTime, avgN: thrust.avgN, peakN: thrust.peakN } : null,
+    ejection: ejectionTimes(flight, A),
+    settingsCheck: flight.settings ? checkSettings(flight.settings) : null,
+    timelineNotes: marks,
+    recovery,
+  };
+  const zip = buildExport(flight, A, extra);
+  downloadBlob(`${fileSlug(currentEntryName ?? flight.gps?.name ?? flight.name)}-data.zip`, new Blob([new Uint8Array(zip)], { type: "application/zip" }));
+});
 
 // ---------- share one flight ----------
 const fileSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "flight";

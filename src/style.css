@@ -552,3 +552,4 @@ li[tabindex="0"] { cursor: pointer; }
 .pre-card-in .fld { margin-top: 4px; min-width: 0; }
 @media (max-width: 640px) { .pre-card-in { grid-template-columns: 1fr; } }
 @media print { #report td.chk { width: 26px; text-align: center; font-size: 13pt; } }
+#export-all { margin-left: auto; }
