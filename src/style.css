@@ -496,3 +496,12 @@ li[tabindex="0"] { cursor: pointer; }
 .set-check li.warn { border-left-color: var(--signal); }
 .set-check li b { display: block; font-weight: 600; margin-bottom: 2px; }
 .set-check li span { color: #c3cde0; }
+
+/* library multi-select */
+.lib-selbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; padding: 8px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--accent); }
+.lib-selbar > span:first-child { font-weight: 600; }
+.lib-selbar .muted { flex: 1; min-width: 180px; }
+.lib-selbar .primary:disabled { opacity: 0.45; }
+.lib-table td.pick { width: 28px; padding-right: 0; }
+.lib-table td.pick input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.lib-table tr.sel td { background: rgba(108, 196, 255, 0.07); }

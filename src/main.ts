@@ -1339,6 +1339,30 @@ $("save-form").addEventListener("submit", async (e) => {
 
 const num = (v: number | null | undefined, d = 0) => (v === null || v === undefined || !Number.isFinite(v) ? "-" : v.toFixed(d));
 
+// ids picked in the library, in the order they were ticked (the first flight becomes the main one)
+let libSel: string[] = [];
+function renderLibSel() {
+  const bar = $("lib-selbar");
+  bar.hidden = libSel.length === 0;
+  $("lib-selcount").textContent = `${libSel.length} selected`;
+  const btn = $<HTMLButtonElement>("lib-together");
+  btn.disabled = libSel.length < 2 || libSel.length > MAX_COMPARES + 1;
+  btn.title = libSel.length > MAX_COMPARES + 1 ? `Pick at most ${MAX_COMPARES + 1}: one flight plus ${MAX_COMPARES} to compare` : "";
+}
+async function openTogether() {
+  const entries = (await Promise.all(libSel.map((id) => getEntry(id)))).filter((x): x is LibraryEntry => !!x);
+  const base = entries.find((e) => e.kind === "flight");
+  if (!base) { showWarnings(["Pick at least one real flight (not only sims) to open the others against."]); return; }
+  libDlg.close();
+  setBusy(true);
+  recovery = base.recovery ?? loadDefaultRecovery();
+  try {
+    await loadFiles(base.files, base.id, base.name);
+    for (const e of entries.filter((x) => x !== base).slice(0, MAX_COMPARES)) await loadCompare(e.files);
+  } finally { setBusy(false); }
+  libSel = [];
+}
+
 async function renderLibrary() {
   const all = await listEntries();
   const q = $<HTMLInputElement>("lib-search").value.trim().toLowerCase();
@@ -1368,8 +1392,9 @@ async function renderLibrary() {
   } else if (list.length === 0) {
     el.innerHTML = '<div class="lib-empty">Nothing matches. Try fewer words or show flights and sims.</div>';
   } else {
-    el.innerHTML = `<table class="lib-table"><tr><th>Date</th><th>Name</th><th style="text-align:right">Apogee</th><th style="text-align:right">Flight time</th><th style="text-align:right">Drift</th><th>Notes</th><th><span class="sr-only">Unit</span></th></tr>${list
-      .map((e) => `<tr class="${e.id === currentEntryId ? "current" : ""}">
+    el.innerHTML = `<table class="lib-table"><tr><th><span class="sr-only">Select</span></th><th>Date</th><th>Name</th><th style="text-align:right">Apogee</th><th style="text-align:right">Flight time</th><th style="text-align:right">Drift</th><th>Notes</th><th><span class="sr-only">Actions</span></th></tr>${list
+      .map((e) => `<tr class="${e.id === currentEntryId ? "current" : ""}${libSel.includes(e.id) ? " sel" : ""}">
+        <td class="pick"><input type="checkbox" data-pick="${e.id}" ${libSel.includes(e.id) ? "checked" : ""} aria-label="Select ${escapeHtml(e.name)}" /></td>
         <td>${escapeHtml(e.date || "-")}</td>
         <td>${hl(e.name)}${e.kind === "sim" ? '<span class="tag">Sim</span>' : ""}${e.stats.hasGps ? '<span class="tag">GPS</span>' : ""}
           <div class="chips">${e.vehicle ? `<span class="chipline">${hl(e.vehicle)}</span>` : ""}${e.motor ? `<span class="chipline">${hl(e.motor)}</span>` : ""}${(e.tags ?? []).map((tg) => `<span class="chipline tagc">${hl(tg)}</span>`).join("")}</div></td>
@@ -1464,13 +1489,23 @@ $("lib-search").addEventListener("input", () => renderLibrary());
 $("lib-kind").addEventListener("change", () => renderLibrary());
 $("lib-sort").addEventListener("change", () => renderLibrary());
 
-$("lib-open").addEventListener("click", async () => { await renderLibrary(); libDlg.showModal(); });
+$("lib-open").addEventListener("click", async () => { libSel = []; renderLibSel(); await renderLibrary(); libDlg.showModal(); });
+$("lib-together").addEventListener("click", () => openTogether());
+$("lib-selclear").addEventListener("click", async () => { libSel = []; renderLibSel(); await renderLibrary(); });
 $("lib-close").addEventListener("click", () => libDlg.close());
 const aboutDlg = $<HTMLDialogElement>("about-dialog");
 $("about-open").addEventListener("click", () => aboutDlg.showModal());
 $("about-close").addEventListener("click", () => aboutDlg.close());
 aboutDlg.addEventListener("click", (e) => { if (e.target === aboutDlg) aboutDlg.close(); });
 $("lib-list").addEventListener("click", async (ev) => {
+  const pick = (ev.target as HTMLElement).closest("input[data-pick]") as HTMLInputElement | null;
+  if (pick) {
+    const id = pick.dataset.pick!;
+    libSel = pick.checked ? [...libSel.filter((x) => x !== id), id] : libSel.filter((x) => x !== id);
+    pick.closest("tr")?.classList.toggle("sel", pick.checked);
+    renderLibSel();
+    return;
+  }
   const b = (ev.target as HTMLElement).closest("button[data-act]") as HTMLButtonElement | null;
   if (!b) return;
   const entry = await getEntry(b.dataset.id!);
