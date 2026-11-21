@@ -686,3 +686,18 @@ button.chipline:hover { border-color: var(--line); color: var(--ink, inherit); }
 .sdiff-t th { text-align: left; color: var(--muted); font-weight: 500; padding: 3px 4px; }
 .sdiff-t td { text-align: left; vertical-align: top; padding: 4px; border-top: 1px solid var(--line); overflow-wrap: break-word; }
 .sdiff-t td:first-child { font-weight: 600; white-space: nowrap; }
+/* phones: comparison controls big enough to tap, and the key-number table with three comparisons kept legible */
+@media (pointer: coarse) {
+  .align-seg button { min-height: 36px; }
+  .cmp-item input[type="number"] { min-height: 36px; }
+  .cmp-item .x { min-width: 36px; min-height: 36px; }
+  .cmp-item input[type="checkbox"] { width: 20px; height: 20px; }
+  .cmp-item label.same { min-height: 36px; }
+  .btn.small-btn { min-height: 36px; }
+  .help-btn { min-width: 28px; min-height: 28px; }
+}
+@media (max-width: 480px) {
+  .metrics.cmp td:nth-child(n+2) { font-size: 13px; padding-left: 6px; }
+  .metrics.cmp td:nth-child(2), .metrics.cmp td:nth-child(3) { min-width: 0; }
+  .metrics.cmp td.unit { padding-left: 3px; }
+}

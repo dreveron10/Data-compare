@@ -344,10 +344,12 @@ function settingsDiffHtml(other: BlueRavenFlight, e: (x: string) => string, forP
 }
 function renderRedundancy() {
   const pairs = cmps.filter(isSameRocket);
-  $("cmp-redund").innerHTML = pairs.map((c) => {
+  $("cmp-redund").innerHTML = pairs.map((c, k) => {
     const r = redundancy(flight!, A!, c.src!.flight, c.src!.analysis);
     const bad = r.rows.filter((x) => x.flag).length;
-    return `<details class="redund" open><summary><i class="sw" style="background:${c.color}"></i>Same rocket as ${escapeHtml(c.trace.name)}: ${bad ? `${bad} thing${bad === 1 ? "" : "s"} disagree` : "the two altimeters agree"}</summary>
+    // with several units, open only the ones that disagree (and the first), so the panel stays short
+    const open = pairs.length === 1 || bad > 0 || k === 0;
+    return `<details class="redund"${open ? " open" : ""}><summary><i class="sw" style="background:${c.color}"></i>Same rocket as ${escapeHtml(c.trace.name)}: ${bad ? `${bad} thing${bad === 1 ? "" : "s"} disagree` : "the two altimeters agree"}</summary>
       <table class="metrics redund-t"><tr><th></th><th>This unit</th><th>Other unit</th><th>Difference</th></tr>${r.rows
         .map((x) => `<tr class="${x.flag ? "flag" : ""}"><td>${escapeHtml(x.label)}</td><td>${escapeHtml(x.a)}</td><td>${escapeHtml(x.b)}</td><td>${escapeHtml(x.diff)}${x.flag ? '<span class="sr-only"> (disagrees)</span>' : ""}</td></tr>`).join("")}</table>
       <p class="muted small">${c.sameRocket === undefined ? "Matched on the logger clocks (same date, liftoff within 2 minutes)." : "Marked as the same rocket by hand."} Baro offset is the median altitude difference from liftoff to landing, skipping 1.5 s around each pyro fire. A steady offset is usually pad altitude or port size; a spread that grows during descent points at a leaky bay or blocked port. Flagged: apogee off by more than 2% (${show(30, "ft")} minimum), fire times more than 0.5 s apart or a channel firing on one unit only.</p>
