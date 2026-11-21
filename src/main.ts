@@ -930,11 +930,10 @@ function recoveryInputs() {
 }
 
 // ---------- Student Launch checks: the flight-data requirements in one place ----------
-function renderSL() {
-  $("sl-panel").hidden = !A;
-  if (!A || !flight) return;
-  type Row = { label: string; value: string; limit: string; verdict: "pass" | "fail" | "na"; note?: string };
-  const rows: Row[] = [];
+type SLRow = { label: string; value: string; limit: string; verdict: "pass" | "fail" | "na"; note?: string };
+function slRows(): SLRow[] {
+  if (!A || !flight) return [];
+  const rows: SLRow[] = [];
   const re = railExit(flight, A, getVehicle(vehicleKey).railFt);
   rows.push({
     label: "Rail exit speed", value: re ? show(re.v, "ft/s") : "-", limit: `≥ ${show(SL_MIN_RAIL_EXIT, "ft/s")}`,
@@ -948,7 +947,13 @@ function renderSL() {
     verdict: k.apogee === null ? "na" : k.apogee >= 4000 && k.apogee <= 6000 ? "pass" : "fail",
   });
   const rec = evaluate(recovery, recoveryInputs());
-  for (const r of rec.rows) rows.push({ label: r.label === "Drift from pad" ? "Drift from pad" : r.label, value: r.value, limit: r.limit, verdict: r.verdict, note: r.sub ?? r.note });
+  for (const r of rec.rows) rows.push({ label: r.label, value: r.value, limit: r.limit, verdict: r.verdict, note: r.sub ?? r.note });
+  return rows;
+}
+function renderSL() {
+  $("sl-panel").hidden = !A;
+  if (!A || !flight) return;
+  const rows = slRows();
   const fails = rows.filter((r) => r.verdict === "fail").length, passes = rows.filter((r) => r.verdict === "pass").length;
   $("sl-sub").textContent = `${passes} pass, ${fails} over the limit. Limits are from recent Student Launch handbooks; confirm them against this year's. Section masses, limits and the declared target are set in the Recovery check.`;
   $("sl-list").innerHTML = rows.map((r) => `<li class="${r.verdict}"><span class="mark" aria-hidden="true">${r.verdict === "pass" ? "✓" : r.verdict === "fail" ? "✕" : "–"}</span><span class="lbl">${escapeHtml(r.label)}${r.note ? `<small>${escapeHtml(r.note)}</small>` : ""}</span><span class="val">${escapeHtml(r.value)}</span><span class="lim">${escapeHtml(r.limit)}</span><span class="sr-only">${r.verdict === "pass" ? "pass" : r.verdict === "fail" ? "over the limit" : "not checked"}</span></li>`).join("");
@@ -1657,6 +1662,33 @@ async function buildReport() {
         .map((m) => `<tr><td style="white-space:nowrap">${tLabel(m.t)} s</td><td>${e(m.text)}</td></tr>`)
         .join("")}</table></section>`
     : "";
+  const sl = slRows();
+  const slBlock = `<section><h2>Student Launch checks</h2><table><tr><th>Check</th><th class="n">Value</th><th class="n">Limit</th><th></th></tr>${sl
+    .map((r) => `<tr><td>${e(r.label)}${r.note ? ` <span style="color:#6b7891">(${e(r.note)})</span>` : ""}</td><td class="n">${e(r.value)}</td><td class="n">${e(r.limit)}</td><td class="${r.verdict}">${r.verdict === "pass" ? "Pass" : r.verdict === "fail" ? "Over" : ""}</td></tr>`)
+    .join("")}</table></section>`;
+  // launch and airframe: rail exit, angle of attack, thrust-to-weight, fin flutter
+  const veh = getVehicle(vehicleKey);
+  const launchRows: [string, string][] = [];
+  const re = railExit(flight, A, veh.railFt);
+  if (re) launchRows.push(["Rail exit speed", `${show(re.v, "ft/s")} after ${show(veh.railFt, "ft", 1)} of rail travel`]);
+  const wre = flight.gps ? windProfile(flight.gps, A) : null;
+  if (re && wre) { const low = wre.bins[wre.bins.length - 1]; launchRows.push(["Angle of attack at rail exit", `${((Math.atan2(low.speed, re.v) * 180) / Math.PI).toFixed(1)}° (${show(low.speed * 0.681818, "mph")} ground wind)`]); }
+  if (flight.hr && A.axialAccel) {
+    const cc = coastCfg(), mc = motorCfg();
+    const m = cc.massLb ?? recovery.sections.reduce((n, sct) => n + (sct.massLb > 0 ? sct.massLb : 0), 0);
+    const cdv = coastDrag(flight, A, m, cc.diaIn)?.cd50 ?? 0.45;
+    const th = thrustCurve(flight, A, m, mc.propLb ?? 0, cc.diaIn, cdv);
+    if (th) {
+      const early = th.thrustLbf.filter((_, i) => th.t[i] - th.t[0] <= 0.3);
+      launchRows.push(["Liftoff thrust-to-weight", `${(early.reduce((a, b) => a + b, 0) / Math.max(1, early.length) / (m + (mc.propLb ?? 0))).toFixed(1)} : 1`]);
+      launchRows.push(["Measured motor", `${th.impulseNs.toFixed(0)} N·s (${th.motorClass}), ${th.burnTime.toFixed(2)} s burn`]);
+      launchRows.push(["Coast Cd", cdv.toFixed(2)]);
+    }
+  }
+  if (veh.fin) { const fl = flutterMargin(flight, A, veh.fin); if (fl) launchRows.push(["Fin flutter margin", `${fl.minRatio.toFixed(2)}× (flutter ${show(fl.vfAt, "ft/s")} vs ${show(fl.vAt, "ft/s")} at T+${fl.tAt.toFixed(1)} s)`]); }
+  const launchBlock = launchRows.length
+    ? `<section><h2>Launch and airframe</h2><table>${launchRows.map(([k, v]) => `<tr><td>${e(k)}</td><td class="n">${e(v)}</td></tr>`).join("")}</table><p style="color:#6b7891">Masses and fin dimensions from the Vehicle card${vehicleLabel ? ` (${e(vehicleLabel)})` : ""}.</p></section>`
+    : "";
   const mine = keyNumbersOf(A);
   const cmpBlock = cmps.length
     ? `<section><h2>Comparison</h2><p>Lined up at ${ALIGN_NAME[alignAt]}${cmps.some((c) => c.offset) ? `; shifts: ${cmps.map((c) => `${e(c.trace.name)} ${c.offset >= 0 ? "+" : ""}${c.offset.toFixed(2)} s`).join(", ")}` : ""}.</p><table><tr><th>Metric</th><th class="n">This flight</th>${cmps.map((c) => `<th class="n">${e(c.trace.kind === "sim" ? "Sim: " + c.trace.name : c.trace.name)}</th>`).join("")}<th><span class="sr-only">Unit</span></th></tr>${KEY_ROWS.map(
@@ -1677,6 +1709,8 @@ async function buildReport() {
       </div>
     </div>
     ${notesBlock}
+    ${slBlock}
+    ${launchBlock}
     ${gpsBlock}
     <div class="cols">${descBlock}${windBlock}</div>
     ${cmpBlock}
