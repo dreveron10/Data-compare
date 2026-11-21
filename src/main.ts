@@ -6,6 +6,7 @@ import { Charts } from "./charts";
 import { loadAndAnalyze } from "./background";
 import { findFindings } from "./findings";
 import { conv, cu, getUnits, onUnitsChange, setUnits, show } from "./units";
+import { windProfile, compassName } from "./wind";
 import { descentPhases, rateVsAltitude } from "./descent";
 import uPlot from "uplot";
 import { CMP_COLORS, KEY_ROWS, MAX_COMPARES, keyNumbersOf, traceFromFlight, traceFromSim, type ActiveCompare, type CompareTrace } from "./compare";
@@ -332,6 +333,7 @@ function renderDescent() {
         .map((p) => `<tr title="${p.altTop.toFixed(0)} to ${p.altBottom.toFixed(0)} ft, T+${p.t0.toFixed(1)} to ${p.t1.toFixed(1)} s"><td>${p.name}<small class="muted" style="display:block">${conv(p.altTop, "ft")[0].toFixed(0)} to ${show(p.altBottom, "ft")}</small></td><td>${show(p.rate, "ft/s", 1)}</td><td>${show(p.seaLevelRate, "ft/s", 1)}</td><td>${show(p.cdA, "ft²", 1)}</td></tr>`)
         .join("")}`
     : '<tr><td class="muted">No steady descent found.</td></tr>';
+  renderWind();
   const { x, y } = rateVsAltitude(flight, A);
   descPlot?.destroy();
   const host = $("desc-chart");
@@ -350,6 +352,19 @@ function renderDescent() {
     series: [{}, { stroke: "#6cc4ff", width: 1.5, points: { show: false } }],
   }, [x.map((v) => conv(v, "ft")[0]), y.map((v) => conv(v, "ft/s")[0])], host);
 }
+
+function renderWind() {
+  const w = flight?.gps && A ? windProfile(flight.gps, A) : null;
+  $("wind").hidden = !w;
+  if (!w) return;
+  const max = Math.max(...w.bins.map((b) => b.speed), 1);
+  const spd = (v: number) => show(v * 0.681818, "mph");
+  $("wind-sub").textContent = `Average ${spd(w.mean.speed)} from the ${compassName(w.mean.fromDeg)} (${w.mean.fromDeg.toFixed(0)}°). Under a settled parachute the rocket drifts at about the wind speed, so this is the wind it flew through, not a forecast. ${SETTLE_HINT}`;
+  $("wind-table").innerHTML = `<tr><th>Altitude (${cu("ft")} AGL)</th><th>Speed</th><th>From</th></tr>${w.bins
+    .map((b) => `<tr title="${b.n} GPS samples. Arrow shows where the wind blows toward."><td>${conv(b.lo, "ft")[0].toFixed(0)}-${conv(b.hi, "ft")[0].toFixed(0)}</td><td><span class="spd">${spd(b.speed)}<span class="bar" style="width:${((b.speed / max) * 100).toFixed(0)}%"></span></span></td><td><span class="arrow" style="transform:rotate(${(b.fromDeg + 180).toFixed(0)}deg)" aria-hidden="true">↑</span>${compassName(b.fromDeg)} ${b.fromDeg.toFixed(0)}°</td></tr>`)
+    .join("")}`;
+}
+const SETTLE_HINT = "The first 4 s after each deployment are skipped while the chute settles.";
 
 // ---------- findings ----------
 function renderFindings() {
