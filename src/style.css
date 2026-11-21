@@ -355,3 +355,9 @@ mark { background: rgba(255, 122, 26, 0.28); color: inherit; border-radius: 2px;
 .scrub input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 3px solid var(--signal); }
 .scrub input[type="range"]:focus-visible { outline: none; }
 .scrub input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--signal); }
+
+/* trends */
+.lib-view { margin-top: 10px; }
+#tr-chart { margin-top: 10px; }
+#tr-table { margin-top: 8px; }
+#lib-trends .chk { margin-top: 0; }

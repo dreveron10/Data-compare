@@ -949,7 +949,8 @@ $("save-form").addEventListener("submit", async (e) => {
     id: currentEntryId ?? newId(),
     kind: "flight", name, date, notes, vehicle, motor, tags,
     savedAt: new Date().toISOString(),
-    stats: { apogee: k.apogee, flightTime: k.flightTime, drift: k.drift, maxVel: k.maxVel, hasGps: !!flight.gps },
+    stats: { apogee: k.apogee, flightTime: k.flightTime, drift: k.drift, maxVel: k.maxVel, hasGps: !!flight.gps,
+      drogueRate: k.drogueRate, mainRate: k.mainRate, maxAccel: k.maxAccel, mainAlt: k.mainAlt },
     files: lastFiles,
     recovery,
   };
@@ -1027,6 +1028,78 @@ async function renderLibrary() {
   const u = await storageUse();
   $("lib-usage").textContent = `${list.length === all.length ? `${all.length} saved` : `${list.length} of ${all.length} shown`}${u ? `, ${(u.used / 1048576).toFixed(1)} MB used of ${(u.quota / 1073741824).toFixed(1)} GB available` : ""}`;
 }
+// ---------- trends across the library ----------
+const TREND_COLORS = ["#6cc4ff", "#ff7a1a", "#7bd88f", "#b48cff", "#f5c26b", "#ff9de2", "#c6f07a", "#e86bff"];
+let trendPlot: uPlot | undefined;
+async function renderTrends() {
+  const [key, unit] = $<HTMLSelectElement>("tr-metric").value.split("|") as [keyof LibraryEntry["stats"], string];
+  const groupBy = $<HTMLSelectElement>("tr-group").value as "vehicle" | "motor" | "none";
+  const sims = $<HTMLInputElement>("tr-sims").checked;
+  const all = (await listEntries()).filter((e) => (sims || e.kind === "flight") && e.date);
+  const pts = all
+    .map((e) => ({ e, x: Date.parse(e.date + "T12:00:00") / 1000, y: e.stats[key] as number | null | undefined }))
+    .filter((p) => p.y !== null && p.y !== undefined && Number.isFinite(p.y) && Number.isFinite(p.x)) as { e: LibraryEntry; x: number; y: number }[];
+  const gname = (e: LibraryEntry) => (groupBy === "none" ? "All flights" : (groupBy === "vehicle" ? e.vehicle : e.motor) || "Not set");
+  const groups = [...new Set(pts.map((p) => gname(p.e)))];
+  const missing = all.length - pts.length;
+  $("tr-note").textContent = `${pts.length} flight${pts.length === 1 ? "" : "s"} plotted.${missing ? ` ${missing} saved before this metric was recorded or without the data (open and re-save them to include).` : ""}`;
+  trendPlot?.destroy();
+  trendPlot = undefined;
+  const host = $("tr-chart");
+  host.innerHTML = "";
+  if (pts.length === 0) {
+    host.innerHTML = '<div class="lib-empty">No saved flights have this metric yet.</div>';
+    $("tr-table").innerHTML = "";
+    return;
+  }
+  const xs = [...new Set(pts.map((p) => p.x))].sort((a, b) => a - b);
+  const data: (number | null)[][] = [xs];
+  for (const g of groups) {
+    data.push(xs.map((x) => {
+      const hit = pts.filter((p) => p.x === x && gname(p.e) === g);
+      return hit.length ? conv(hit.reduce((n, p) => n + p.y, 0) / hit.length, unit)[0] : null;
+    }));
+  }
+  const pad = 86400 * 10;
+  trendPlot = new uPlot({
+    width: Math.max(300, host.clientWidth || 800),
+    height: 240,
+    scales: { x: { time: true, range: (_u, mn, mx) => [mn - pad, mx + pad] } },
+    axes: [
+      { stroke: "#8d9bb8", grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, font: "12px Barlow, system-ui" },
+      { stroke: "#8d9bb8", grid: { stroke: "rgba(38,54,86,0.6)", width: 1 }, label: cu(unit), labelSize: 20, size: 56, font: "12px Barlow, system-ui", labelFont: "12px Barlow, system-ui" },
+    ],
+    series: [
+      { label: "Date" },
+      ...groups.map((g, i) => ({
+        label: g, stroke: TREND_COLORS[i % TREND_COLORS.length], width: 1.5, spanGaps: true,
+        points: { show: true, size: 9, fill: TREND_COLORS[i % TREND_COLORS.length] },
+        value: (_u: uPlot, v: number | null) => (v == null ? "-" : `${v.toFixed(unit === "g" || unit === "s" ? 1 : 0)} ${cu(unit)}`),
+      })),
+    ],
+  }, data as uPlot.AlignedData, host);
+  // per-group stats
+  const rows = groups.map((g, i) => {
+    const ys = pts.filter((p) => gname(p.e) === g).map((p) => conv(p.y, unit)[0]);
+    const mean = ys.reduce((a, b) => a + b, 0) / ys.length;
+    const sd = Math.sqrt(ys.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, ys.length - 1));
+    const d = unit === "g" || unit === "s" ? 2 : 0;
+    return `<tr><td><i class="sw" style="background:${TREND_COLORS[i % TREND_COLORS.length]}"></i> ${escapeHtml(g)}</td><td>${ys.length}</td><td>${mean.toFixed(d)}</td><td>${ys.length > 1 ? sd.toFixed(d) : "-"}</td><td>${Math.min(...ys).toFixed(d)}</td><td>${Math.max(...ys).toFixed(d)}</td><td class="unit">${cu(unit)}</td></tr>`;
+  }).join("");
+  $("tr-table").innerHTML = `<tr><th>Group</th><th>Flights</th><th>Mean</th><th>Spread (1σ)</th><th>Min</th><th>Max</th><th></th></tr>${rows}`;
+}
+document.querySelectorAll<HTMLButtonElement>("[data-libview]").forEach((b) =>
+  b.addEventListener("click", () => {
+    const trends = b.dataset.libview === "trends";
+    document.querySelectorAll("[data-libview]").forEach((x) => x.classList.toggle("active", x === b));
+    $("lib-trends").hidden = !trends;
+    $("lib-list-tools").hidden = trends;
+    $("lib-list").hidden = trends;
+    if (trends) renderTrends();
+  }),
+);
+for (const id of ["tr-metric", "tr-group", "tr-sims"]) $(id).addEventListener("change", () => renderTrends());
+
 $("lib-search").addEventListener("input", () => renderLibrary());
 $("lib-kind").addEventListener("change", () => renderLibrary());
 $("lib-sort").addEventListener("change", () => renderLibrary());

@@ -219,7 +219,34 @@
         <button class="btn small-btn" id="lib-close">Close</button>
       </div>
       <p class="muted small">Flights saved in this browser. Export a backup now and then: clearing browser data deletes the library.</p>
-      <div class="lib-tools">
+      <div class="seg lib-view" role="tablist" aria-label="Library view">
+        <button data-libview="list" class="active" role="tab">Flights</button>
+        <button data-libview="trends" role="tab">Trends</button>
+      </div>
+      <div id="lib-trends" hidden>
+        <div class="lib-tools">
+          <select id="tr-metric" aria-label="Metric">
+            <option value="apogee|ft">Apogee</option>
+            <option value="maxVel|ft/s">Max velocity</option>
+            <option value="maxAccel|g">Max boost accel</option>
+            <option value="drogueRate|ft/s">Drogue descent rate</option>
+            <option value="mainRate|ft/s">Main descent rate</option>
+            <option value="mainAlt|ft">Main deploy altitude</option>
+            <option value="drift|ft">Drift at landing</option>
+            <option value="flightTime|s">Flight time</option>
+          </select>
+          <select id="tr-group" aria-label="Group by">
+            <option value="vehicle">Group by vehicle</option>
+            <option value="motor">Group by motor</option>
+            <option value="none">No grouping</option>
+          </select>
+          <label class="chk"><input type="checkbox" id="tr-sims" /> Include sims</label>
+        </div>
+        <div id="tr-chart"></div>
+        <table class="metrics cmp" id="tr-table"></table>
+        <p class="muted small" id="tr-note"></p>
+      </div>
+      <div class="lib-tools" id="lib-list-tools">
         <input type="search" id="lib-search" placeholder="Search name, motor, vehicle, tags, notes" aria-label="Search the library" />
         <select id="lib-kind" aria-label="Show">
           <option value="all">Flights and sims</option>

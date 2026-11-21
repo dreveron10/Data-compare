@@ -16,7 +16,10 @@ export interface LibraryEntry {
   motor?: string;
   tags?: string[];
   savedAt: string; // ISO
-  stats: { apogee?: number | null; flightTime?: number | null; drift?: number | null; maxVel?: number | null; hasGps?: boolean };
+  stats: {
+    apogee?: number | null; flightTime?: number | null; drift?: number | null; maxVel?: number | null; hasGps?: boolean;
+    drogueRate?: number | null; mainRate?: number | null; maxAccel?: number | null; mainAlt?: number | null;
+  };
   files: StoredFile[];
   /** recovery check setup for this vehicle (section masses, limits) */
   recovery?: RecoveryConfig;
