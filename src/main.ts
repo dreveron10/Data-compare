@@ -905,8 +905,9 @@ function flightDate(): string {
   // the GPS clock is reliable; the Blue Raven clock may not be set
   const g = flight?.gps;
   if (g) {
-    const d = new Date(g.launchUnix * 1000);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    // UTC date of launch (US launches happen in daylight, so the UTC date is the local date)
+    const d = new Date(g.launchUtcMs ?? g.launchUnix * 1000);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
   }
   return flight?.lr?.date ?? "";
 }

@@ -22,6 +22,9 @@ export interface GpsData {
   battV: Float32Array;
   distance: Float32Array; // ft from pad
   launchUnix: number;
+  /** launch time from the UTCTIME text column (ms since epoch). More trustworthy than UNIXTIME,
+   *  which some Featherweight exports offset by the computer's time zone. */
+  launchUtcMs: number | null;
   apogeeT: number | null;
   landingT: number | null;
   padLat: number;
@@ -61,7 +64,7 @@ export function parseGpsLog(text: string, name = "GPS tracker"): GpsData {
     return i;
   };
   const I = {
-    unix: col("UNIXTIME"), alt: col("ALT"), lat: col("LAT"), lon: col("LON"),
+    unix: col("UNIXTIME"), utc: col("UTCTIME", false), alt: col("ALT"), lat: col("LAT"), lon: col("LON"),
     sats: col("#SATS", false), fix: col("FIX", false), hv: col("HORZV", false), vv: col("VERTV", false),
     head: col("HEAD", false), rssi: col("RSSI", false), batt: col("BATT", false),
     agl: col("Altitude AGL", false), launch: col("Launch detection", false),
@@ -108,12 +111,19 @@ export function parseGpsLog(text: string, name = "GPS tracker"): GpsData {
   }
 
   const launchUnix = launchIdx >= 0 ? unix[launchIdx] : unix[0];
+  let launchUtcMs: number | null = null;
+  if (I.utc >= 0) {
+    // e.g. "Apr 26 2026 19:14:18.700 UTC"
+    const m = rows[Math.max(0, launchIdx)][I.utc]?.match(/^(\w{3}) (\d{1,2}) (\d{4}) (\d{2}):(\d{2}):(\d{2})(\.\d+)?/);
+    const mon = m ? ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].indexOf(m[1]) : -1;
+    if (m && mon >= 0) launchUtcMs = Date.UTC(+m[3], mon, +m[2], +m[4], +m[5], +m[6], m[7] ? Math.round(parseFloat(m[7]) * 1000) : 0);
+  }
   const t = new Float64Array(n);
   for (let i = 0; i < n; i++) t[i] = unix[i] - launchUnix;
 
   return {
     name, n, t, unix, altAsl, altAgl, lat, lon, east, north, sats, fix, horzV, vertV, heading, rssi, battV, distance,
-    launchUnix,
+    launchUnix, launchUtcMs,
     apogeeT: apoIdx >= 0 ? t[apoIdx] : null,
     landingT: landIdx >= 0 ? t[landIdx] : null,
     padLat: pLat, padLon: pLon, padAsl: pAlt,

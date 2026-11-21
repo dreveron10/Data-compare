@@ -130,7 +130,103 @@ export function findFindings(f: BlueRavenFlight, a: Analysis): Finding[] {
     }
   }
 
+  // 8) data quality
+  out.push(...dataQuality(f, a, lift, tLand));
+
   out.sort((x, y) => (x.t ?? 1e9) - (y.t ?? 1e9));
   if (!out.some((x) => x.level === "warn")) out.unshift({ level: "good", title: "Nothing unusual found", detail: "Deployments matched their settings and no large shocks, spikes or attitude problems were detected." });
+  return out;
+}
+
+function gapsIn(t: ArrayLike<number>, t0: number, t1: number) {
+  const n = t.length;
+  if (n < 10) return { count: 0, longest: 0, at: 0, nominal: 0 };
+  const d: number[] = [];
+  for (let i = 1; i < Math.min(n, 2000); i++) d.push(t[i] - t[i - 1]);
+  d.sort((x, y) => x - y);
+  const nominal = d[Math.floor(d.length / 2)];
+  let count = 0, longest = 0, at = 0;
+  for (let i = lowerBound(t, t0) + 1; i < n && t[i] <= t1; i++) {
+    const g = t[i] - t[i - 1];
+    if (g > Math.max(nominal * 4, 0.05)) {
+      count++;
+      if (g > longest) { longest = g; at = t[i - 1]; }
+    }
+  }
+  return { count, longest, at, nominal };
+}
+
+function dataQuality(f: BlueRavenFlight, a: Analysis, lift: number, tLand: number): Finding[] {
+  const out: Finding[] = [];
+  const lr = f.lr!;
+  // log gaps during the flight
+  const lg = gapsIn(lr.t, lift, tLand);
+  if (lg.count > 0) {
+    out.push({ level: "info", title: "Gaps in the low-rate log", detail: `${lg.count} gap${lg.count > 1 ? "s" : ""} longer than normal (${(lg.nominal * 1000).toFixed(0)} ms spacing); the longest is ${lg.longest.toFixed(2)} s.`, t: lg.at });
+  }
+  if (f.hr) {
+    const hg = gapsIn(f.hr.t, lift, tLand);
+    if (hg.count > 0) {
+      out.push({ level: "info", title: "Gaps in the high-rate log", detail: `${hg.count} gap${hg.count > 1 ? "s" : ""}, the longest ${hg.longest.toFixed(2)} s. Attitude is interpolated across them.`, t: hg.at });
+    }
+    // accelerometer clipping: the same extreme value held for several samples
+    const names = ["X", "Y", "Z"];
+    for (let k = 0; k < 3; k++) {
+      let peak = 0;
+      for (let i = 0; i < f.hr.n; i++) peak = Math.max(peak, Math.abs(f.hr.accel[i * 3 + k]));
+      if (peak < 8) continue;
+      let run = 0, best = 0, at = 0;
+      for (let i = 0; i < f.hr.n; i++) {
+        if (Math.abs(Math.abs(f.hr.accel[i * 3 + k]) - peak) < 1e-3) { run++; if (run > best) { best = run; at = f.hr.t[i]; } }
+        else run = 0;
+      }
+      if (best >= 3) {
+        out.push({ level: "warn", title: `Accelerometer ${names[k]} axis clipped`, detail: `Stuck at ±${peak.toFixed(1)} g for ${best} samples. Real peaks were higher than logged.`, t: at });
+      }
+    }
+  }
+  // gyro overload reported by the Blue Raven
+  const gyroT = f.summary?.num["Time to gyro overload"];
+  if (gyroT && gyroT > 0) {
+    out.push({ level: "info", title: "Gyro overloaded", detail: "The Blue Raven reported its gyro range was exceeded; attitude after this point is less reliable.", t: lift + gyroT });
+  }
+  // clock mismatch between Blue Raven and GPS
+  if (f.gps && lr.clock.length) {
+    const iL = Math.max(0, lowerBound(lr.t, lift));
+    const brMs = Date.parse(`${lr.date}T${lr.clock[iL]}Z`);
+    const gpsMs = f.gps.launchUtcMs ?? f.gps.launchUnix * 1000;
+    if (Number.isFinite(brMs)) {
+      const diffS = (brMs - gpsMs) / 1000;
+      if (Math.abs(diffS) > 60) {
+        const days = Math.trunc(diffS / 86400);
+        const hrs = Math.round((diffS - days * 86400) / 3600);
+        const parts = [days ? `${Math.abs(days)} day${Math.abs(days) > 1 ? "s" : ""}` : "", hrs ? `${Math.abs(hrs)} h` : ""].filter(Boolean).join(" ");
+        out.push({
+          level: "info",
+          title: "Blue Raven clock doesn't match GPS time",
+          detail: `Its clock is ${parts || `${Math.round(Math.abs(diffS))} s`} ${diffS < 0 ? "behind" : "ahead of"} GPS time (UTC). Analysis uses flight time so nothing here is affected, but set the clock in the Featherweight app so file names and dates match.`,
+        });
+      }
+    }
+    // the tracker's own two time columns disagree (seen in Featherweight exports: UNIXTIME shifted by the PC time zone)
+    if (f.gps.launchUtcMs !== null) {
+      const off = f.gps.launchUnix - f.gps.launchUtcMs / 1000;
+      if (Math.abs(off) > 60) {
+        out.push({
+          level: "info",
+          title: "GPS export has a shifted UNIX time",
+          detail: `The tracker's UNIXTIME column is ${(Math.abs(off) / 3600).toFixed(1)} h ${off > 0 ? "ahead of" : "behind"} its UTC time column, so KML files made from it show the wrong time. This tool uses the UTC column.`,
+        });
+      }
+    }
+    // GPS satellites during flight
+    let minSats = 99, tMin = lift;
+    for (let i = 0; i < f.gps.n; i++) {
+      const tt = f.gps.t[i] + (a.gps?.offset ?? 0);
+      if (tt < lift || tt > tLand) continue;
+      if (f.gps.sats[i] < minSats) { minSats = f.gps.sats[i]; tMin = tt; }
+    }
+    if (minSats < 6) out.push({ level: "warn", title: "GPS lost satellites", detail: `Dropped to ${minSats} satellites; positions around this time may be poor.`, t: tMin });
+  }
   return out;
 }
