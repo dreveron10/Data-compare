@@ -32,6 +32,8 @@ export interface ActiveCompare {
   /** seconds added to the comparison's time (positive = later) */
   offset: number;
   color: string;
+  /** the comparison's own flight and analysis (Blue Raven comparisons), for per-flight checks */
+  src?: { flight: BlueRavenFlight; analysis: Analysis };
 }
 
 export interface CompareTrace {

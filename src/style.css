@@ -630,3 +630,17 @@ table.chute td, table.chute th { font-size: 13px; white-space: nowrap; }
 .veh-ork { margin-top: 10px; display: inline-block; }
 .lib-trash { margin-top: 12px; }
 .lib-trash summary { cursor: pointer; }
+.sl-cmp { margin-top: 14px; }
+.sl-cmp h3 { font-size: 13px; margin: 0 0 6px; }
+.sl-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.sl-table th, .sl-table td { padding: 5px 8px; border-top: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.sl-table th { font-weight: 600; color: var(--muted); }
+.sl-table td.pass .mark { color: var(--good); }
+.sl-table td.fail, .sl-table td.fail .mark { color: var(--bad); }
+.sl-table td.na .mark, .sl-table .lim { color: var(--muted); }
+.sl-table tr.tot td { font-weight: 600; }
+.sl-table .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.table-scroll { overflow-x: auto; }
+.sl-table td:first-child { white-space: normal; min-width: 120px; }
+.sl-table td:first-child small { display: block; color: var(--muted); font-size: 11px; }
+.sl-table th { white-space: normal; vertical-align: bottom; }

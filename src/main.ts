@@ -230,6 +230,7 @@ async function loadCompare(files: InFile[]) {
   try {
     const sim = files.find((f) => f.text && isOpenRocket(f.text));
     let trace: CompareTrace;
+    let cmpSrc: ActiveCompare["src"];
     const brLike = files.some((f) => f.text && identifyText(f.text) !== "unknown");
     const other = !brLike ? files.find((f) => f.text && isGenericAlt(f.text)) : undefined;
     if (sim) {
@@ -241,6 +242,7 @@ async function loadCompare(files: InFile[]) {
       const res = await loadAndAnalyze(files).finally(() => setLoading(null));
       if (!res.flight.lr || !res.analysis) throw new Error("Comparison needs an OpenRocket CSV export or a Blue Raven LR file.");
       trace = traceFromFlight(res.analysis, res.flight);
+      cmpSrc = { flight: res.flight, analysis: res.analysis };
       // Mach/q and thrust for the overlays, on the comparison's own liftoff clock
       const cf = res.flight, ca = res.analysis;
       const clift = ca.events.find((e) => e.key === "liftoff")?.t ?? 0;
@@ -258,7 +260,7 @@ async function loadCompare(files: InFile[]) {
     if (cmps.length >= MAX_COMPARES) cmps.shift();
     const used = new Set(cmps.map((c) => c.color));
     const color = CMP_COLORS.find((c) => !used.has(c)) ?? CMP_COLORS[0];
-    cmps.push({ id: `${Date.now()}-${Math.random()}`, trace, files, offset: 0, color });
+    cmps.push({ id: `${Date.now()}-${Math.random()}`, trace, files, offset: 0, color, src: cmpSrc });
     alignCompares();
     applyCompare();
     showWarnings(A.warnings);
@@ -296,6 +298,7 @@ function applyCompare() {
   charts.setFlight(A, flight, cmps);
   replay.setCompare(cmps);
   renderCompare();
+  renderSL();
   seek(t);
 }
 
@@ -947,10 +950,10 @@ $("findings").addEventListener("click", (e) => {
 });
 
 // ---------- recovery check ----------
-function recoveryInputs() {
-  const k = keyNumbersOf(A!);
-  const apo = A!.events.find((e) => e.key === "apogee")?.t;
-  const land = A!.events.find((e) => e.key === "landing")?.t;
+function recoveryInputs(a: Analysis = A!) {
+  const k = keyNumbersOf(a);
+  const apo = a.events.find((e) => e.key === "apogee")?.t;
+  const land = a.events.find((e) => e.key === "landing")?.t;
   return {
     apogee: k.apogee,
     landingSpeed: k.mainRate !== null ? Math.abs(k.mainRate) : null,
@@ -961,22 +964,22 @@ function recoveryInputs() {
 
 // ---------- Student Launch checks: the flight-data requirements in one place ----------
 type SLRow = { label: string; value: string; limit: string; verdict: "pass" | "fail" | "na"; note?: string };
-function slRows(): SLRow[] {
-  if (!A || !flight) return [];
+function slRows(f: BlueRavenFlight | undefined = flight, a: Analysis | undefined = A): SLRow[] {
+  if (!a || !f) return [];
   const rows: SLRow[] = [];
-  const re = railExit(flight, A, getVehicle(vehicleKey).railFt);
+  const re = railExit(f, a, getVehicle(vehicleKey).railFt);
   rows.push({
     label: "Rail exit speed", value: re ? show(re.v, "ft/s") : "-", limit: `≥ ${show(SL_MIN_RAIL_EXIT, "ft/s")}`,
     verdict: re ? (re.v >= SL_MIN_RAIL_EXIT ? "pass" : "fail") : "na", note: `${show(getVehicle(vehicleKey).railFt, "ft", 1)} of rail travel (Vehicle card)`,
   });
-  const ae = aeroSeries(flight, A);
+  const ae = aeroSeries(f, a);
   rows.push({ label: "Stays subsonic", value: ae ? `Mach ${ae.maxMach.toFixed(2)}` : "-", limit: "< Mach 1", verdict: ae ? (ae.maxMach < 1 ? "pass" : "fail") : "na" });
-  const k = keyNumbersOf(A);
+  const k = keyNumbersOf(a);
   rows.push({
     label: "Apogee in the 4,000 to 6,000 ft band", value: show(k.apogee, "ft"), limit: "4000 to 6000 ft",
     verdict: k.apogee === null ? "na" : k.apogee >= 4000 && k.apogee <= 6000 ? "pass" : "fail",
   });
-  const rec = evaluate(recovery, recoveryInputs());
+  const rec = evaluate(recovery, recoveryInputs(a));
   for (const r of rec.rows) rows.push({ label: r.label, value: r.value, limit: r.limit, verdict: r.verdict, note: r.sub ?? r.note });
   return rows;
 }
@@ -987,6 +990,26 @@ function renderSL() {
   const fails = rows.filter((r) => r.verdict === "fail").length, passes = rows.filter((r) => r.verdict === "pass").length;
   $("sl-sub").textContent = `${passes} pass, ${fails} over the limit. Limits are from recent Student Launch handbooks; confirm them against this year's. Section masses, limits and the declared target are set in the Recovery check.`;
   $("sl-list").innerHTML = rows.map((r) => `<li class="${r.verdict}"><span class="mark" aria-hidden="true">${r.verdict === "pass" ? "✓" : r.verdict === "fail" ? "✕" : "–"}</span><span class="lbl">${escapeHtml(r.label)}${r.note ? `<small>${escapeHtml(r.note)}</small>` : ""}</span><span class="val">${escapeHtml(r.value)}</span><span class="lim">${escapeHtml(r.limit)}</span><span class="sr-only">${r.verdict === "pass" ? "pass" : r.verdict === "fail" ? "over the limit" : "not checked"}</span></li>`).join("");
+  renderSLCompare(rows);
+}
+/** the same checks for each Blue Raven comparison, side by side with this flight */
+function renderSLCompare(rows: SLRow[]) {
+  const box = $("sl-cmp");
+  const others = cmps.filter((c) => c.src);
+  box.hidden = others.length === 0;
+  if (!others.length) { box.innerHTML = ""; return; }
+  const sets = others.map((c) => slRows(c.src!.flight, c.src!.analysis));
+  const cell = (r: SLRow | undefined) => r
+    ? `<td class="${r.verdict}"><span class="mark" aria-hidden="true">${r.verdict === "pass" ? "✓" : r.verdict === "fail" ? "✕" : "–"}</span> ${escapeHtml(r.value)}<span class="sr-only"> ${r.verdict === "pass" ? "pass" : r.verdict === "fail" ? "over the limit" : "not checked"}</span></td>`
+    : "<td>-</td>";
+  const tally = (rs: SLRow[]) => `${rs.filter((r) => r.verdict === "pass").length} pass, ${rs.filter((r) => r.verdict === "fail").length} over`;
+  box.innerHTML = `<h3>Side by side</h3>
+    <div class="table-scroll"><table class="sl-table">
+      <tr><th>Check</th><th>This flight</th>${others.map((c) => `<th><span class="swatch" style="background:${c.color}"></span>${escapeHtml(c.trace.name)}</th>`).join("")}</tr>
+      ${rows.map((r, i) => `<tr><td title="Limit: ${escapeHtml(r.limit)}">${escapeHtml(r.label)}<small>${escapeHtml(r.limit)}</small></td>${cell(r)}${sets.map((s) => cell(s.find((x) => x.label === r.label) ?? s[i])).join("")}</tr>`).join("")}
+      <tr class="tot"><td>Total</td><td>${tally(rows)}</td>${sets.map((s) => `<td>${tally(s)}</td>`).join("")}</tr>
+    </table></div>
+    <p class="muted small">Comparisons use this flight's Vehicle card and Recovery check (rail length, section masses, limits), so they are judged as the same vehicle.</p>`;
 }
 
 function renderRecovery() {
