@@ -48,6 +48,8 @@ export interface CompareTrace {
   /** path is in true east/north (true for sims with position data and GPS-aligned flights) */
   compass: boolean;
   events: { label: string; t: number }[];
+  /** times after liftoff used to line comparisons up at other events */
+  align: { apogee: number | null; main: number | null };
   key: KeyNumbers;
   notes: string[];
 }
@@ -124,6 +126,10 @@ export function traceFromFlight(a: Analysis, f: BlueRavenFlight): CompareTrace {
     attitude,
     compass: a.compass,
     events: a.events.filter((e) => e.key !== "apogee_det").map((e) => ({ label: e.label, t: e.t - lift })),
+    align: {
+      apogee: ev(a, "apogee") !== null ? ev(a, "apogee")! - lift : null,
+      main: ev(a, "fire_Main") !== null ? ev(a, "fire_Main")! - lift : null,
+    },
     key: keyNumbersOf(a),
     notes: [],
   };
@@ -171,6 +177,7 @@ export function traceFromSim(s: SimData): CompareTrace {
     path, compass: !!path,
     events: s.events.filter((e) => !["LAUNCH", "IGNITION", "SIMULATION_END", "LAUNCHROD"].includes(e.name))
       .map((e) => ({ label: e.name.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase()), t: e.t })),
+    align: { apogee: tApo, main: tMain },
     key: {
       apogee: alt[iA],
       tApogee: tApo,

@@ -155,6 +155,12 @@
         <div class="panel" id="cmp-panel" hidden>
           <h3>Compare</h3>
           <div class="muted small" id="cmp-sub">Overlay an OpenRocket simulation export or another Blue Raven flight. Both are aligned at liftoff.</div>
+          <div class="seg align-seg" id="cmp-align" role="group" aria-label="Line comparisons up at" hidden>
+            <span class="muted small">Line up at</span>
+            <button data-align="liftoff" class="active">Liftoff</button>
+            <button data-align="apogee">Apogee</button>
+            <button data-align="main">Main deploy</button>
+          </div>
           <div id="cmp-list"></div>
           <table class="metrics cmp" id="cmp-table"></table>
           <div class="muted small" id="cmp-notes"></div>

@@ -166,12 +166,36 @@ async function loadCompare(files: InFile[]) {
     const used = new Set(cmps.map((c) => c.color));
     const color = CMP_COLORS.find((c) => !used.has(c)) ?? CMP_COLORS[0];
     cmps.push({ id: `${Date.now()}-${Math.random()}`, trace, files, offset: 0, color });
+    alignCompares();
     applyCompare();
     showWarnings(A.warnings);
   } catch (e) {
     showWarnings([`Comparison: ${(e as Error).message}`]);
   }
 }
+
+type AlignAt = "liftoff" | "apogee" | "main";
+let alignAt: AlignAt = (localStorage.getItem("dc.align") as AlignAt) || "liftoff";
+const ALIGN_NAME: Record<AlignAt, string> = { liftoff: "liftoff", apogee: "apogee", main: "main deploy" };
+/** shift each comparison so the chosen event happens at the same moment as in this flight */
+function alignCompares() {
+  if (!A) return;
+  const ev = (k: string) => A!.events.find((e) => e.key === k)?.t ?? null;
+  const lift = ev("liftoff") ?? 0;
+  const mine = alignAt === "apogee" ? ev("apogee") : alignAt === "main" ? ev("fire_Main") : lift;
+  for (const c of cmps) {
+    const theirs = alignAt === "liftoff" ? 0 : c.trace.align[alignAt];
+    c.offset = mine !== null && theirs !== null ? Math.round((mine - lift - theirs) * 100) / 100 : 0;
+  }
+}
+document.querySelectorAll<HTMLButtonElement>("[data-align]").forEach((b) =>
+  b.addEventListener("click", () => {
+    alignAt = b.dataset.align as AlignAt;
+    try { localStorage.setItem("dc.align", alignAt); } catch { /* ignore */ }
+    alignCompares();
+    applyCompare();
+  }),
+);
 
 function applyCompare() {
   if (!A || !flight) return;
@@ -204,9 +228,16 @@ function renderCompare() {
     $("cmp-table").innerHTML = "";
     $("cmp-notes").textContent = "";
     $("cmp-sub").textContent = "Overlay up to 3 OpenRocket sims or other Blue Raven flights. They are aligned at liftoff.";
+    $("cmp-align").hidden = true;
     return;
   }
-  $("cmp-sub").textContent = "Dashed lines in the charts and 3D. Shift a comparison in time if its liftoff doesn't line up.";
+  $("cmp-align").hidden = false;
+  document.querySelectorAll<HTMLElement>("[data-align]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.align === alignAt);
+    b.setAttribute("aria-pressed", String(b.dataset.align === alignAt));
+  });
+  const missing = alignAt === "liftoff" ? [] : cmps.filter((c) => c.trace.align[alignAt as "apogee" | "main"] === null).map((c) => c.trace.name);
+  $("cmp-sub").textContent = `Dashed lines in the charts and 3D, lined up at ${ALIGN_NAME[alignAt]}. Use shift to fine-tune.${missing.length ? ` No ${ALIGN_NAME[alignAt]} found in ${missing.join(", ")}, so it stays at liftoff.` : ""}`;
   $("cmp-list").innerHTML = cmps
     .map((c) => `<div class="cmp-item"><i style="background:${c.color}"></i><span class="nm" title="${escapeHtml(c.trace.name)}">${c.trace.kind === "sim" ? "Sim: " : ""}${escapeHtml(c.trace.name)}</span>
       <label class="off">shift <input type="number" step="0.1" value="${c.offset}" data-off="${c.id}" aria-label="Time shift in seconds" /> s</label>
